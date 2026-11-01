@@ -2,7 +2,8 @@ import type { CandidateView } from "@lumen/api-client";
 import { type KeyboardEvent, type ReactNode, useId, useRef, useState } from "react";
 import { statusOf } from "@/entities/scan-session";
 import { aiNoteText, useI18n } from "@/shared/i18n";
-import { baseName, formatBytes, parentPath } from "@/shared/lib";
+import { baseName, parentPath } from "@/shared/lib";
+import { Bytes } from "@/shared/ui";
 import { commandLine } from "../lib/command";
 import { moveIndex } from "../lib/keys";
 import { type Lens, type LensMark, lensMark } from "../model/lens";
@@ -71,7 +72,7 @@ function Row({
           {baseName(candidate.path)}
         </span>
         <span className="col-start-2 row-start-1 justify-self-end text-right tabular-nums text-ink @xl:col-start-4">
-          {formatBytes(candidate.reclaimable_bytes)}
+          <Bytes value={candidate.reclaimable_bytes} />
         </span>
         <span
           title={location}
@@ -120,7 +121,9 @@ function ListHeading({
         {name}
         <span className="ml-2 font-normal tabular-nums text-ink-3">{m.common.items(count)}</span>
       </span>
-      <span className="text-right font-normal tabular-nums text-ink-2">{formatBytes(bytes)}</span>
+      <span className="text-right font-normal tabular-nums text-ink-2">
+        <Bytes value={bytes} />
+      </span>
     </Tag>
   );
 }
