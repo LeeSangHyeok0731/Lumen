@@ -13,7 +13,7 @@ what is safe to remove, into a quarantine you can restore from.
 [![rust](https://github.com/zaewc/Lumen/actions/workflows/rust.yml/badge.svg)](https://github.com/zaewc/Lumen/actions/workflows/rust.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-[**Download**](https://zaewc.github.io/Lumen/en/) · [한국어](https://zaewc.github.io/Lumen/) · [How it works](ARCHITECTURE.md) · [Roadmap](docs/architecture/roadmap.md)
+[**Download**](https://zaewc.github.io/Lumen/en/) · [한국어](README.ko.md) · [How it works](ARCHITECTURE.md) · [Roadmap](docs/architecture/roadmap.md)
 
 ![Language Stats](https://github-repository-language-graph-wi.vercel.app/api?username=zaewc&repo=Lumen&theme=dark&precision=6)
 
