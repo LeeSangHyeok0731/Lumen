@@ -17,11 +17,17 @@ import { QuitHeld } from "./QuitHeld";
 /**
  * A workspace navigation above the independently scrolling page. Storage
  * and evidence get the full window width. Until the user has chosen whether
- * to use AI review, the first screen asks instead (ADR-0050); if the setting
- * cannot be read, the app opens as usual and AI review stays off.
+ * to use AI review, the first screen asks instead (ADR-0050); while the
+ * setting is being read, only the empty window shows; if it cannot be read,
+ * the app opens as usual and AI review stays off.
  */
 function Layout() {
   const ai = useAiSettings();
+  // Until the setting is read, draw only the window: the workspace must not
+  // show for a moment before the first-launch question replaces it.
+  if (ai.isPending) {
+    return <div className="h-dvh bg-canvas" />;
+  }
   if (ai.data !== undefined && !ai.data.chosen) {
     return <FirstLaunchPage settings={ai.data} />;
   }
