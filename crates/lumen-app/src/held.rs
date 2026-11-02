@@ -220,9 +220,13 @@ fn reconcile_with(
 
 /// Every item held in quarantine next to `db`, oldest first, after settling
 /// interrupted operations; then the items reconciliation could not settle
-/// are listed too. While another Lumen holds the ledger (a cleanup under
-/// way), or in a privileged process, nothing is settled and unfinished
-/// operations are left out: they may be in flight.
+/// are listed too. If the executor is unavailable (a privileged process or
+/// unknown store location), or the ledger lock cannot be acquired, nothing
+/// is settled and unfinished operations are left out. Without reconciliation
+/// under the lock, they may be in flight in another process, not in need of
+/// the user. The existing held state cannot distinguish those cases, even
+/// though restore and finalize refuse unfinished states. Executor setup
+/// failures are logged by error kind only, without paths (ADR-0022).
 ///
 /// # Errors
 ///
@@ -231,7 +235,10 @@ fn reconcile_with(
 pub fn list(db: &Path, clock: &dyn Clock) -> Result<Vec<HeldItem>, HeldError> {
     list_with(
         db,
-        &|| refuse_privileged().ok().and_then(|()| executor().ok()),
+        &|| {
+            refuse_privileged()?;
+            executor()
+        },
         clock,
     )
 }
@@ -239,20 +246,37 @@ pub fn list(db: &Path, clock: &dyn Clock) -> Result<Vec<HeldItem>, HeldError> {
 /// As [`list`], asking for `executor` only if an operation is unfinished.
 fn list_with(
     db: &Path,
-    executor: &dyn Fn() -> Option<Executor>,
+    executor: &dyn Fn() -> Result<Executor, HeldError>,
     clock: &dyn Clock,
 ) -> Result<Vec<HeldItem>, HeldError> {
     let mut ledger = ledger(db)?;
     let settling = if ledger.unfinished()?.is_empty() {
         None
     } else {
-        executor().and_then(|executor| {
-            lock_ledger(db, false)
-                .inspect_err(|error| tracing::warn!(%error, "the ledger could not be locked"))
-                .ok()
-                .flatten()
-                .map(|lock| (executor, lock))
-        })
+        executor()
+            .inspect_err(|error| {
+                let reason = match error {
+                    HeldError::Privileged(PrivilegeError::Root) => "root",
+                    HeldError::Privileged(PrivilegeError::Elevated) => "elevated",
+                    HeldError::Privileged(PrivilegeError::Token(_)) => "process_token",
+                    HeldError::Location(LocationError::NoHome) => "no_home",
+                    HeldError::Location(LocationError::NoLocalAppData) => "no_local_app_data",
+                    HeldError::UnknownOperation(_) => "unknown_operation",
+                    HeldError::Store(_) => "store",
+                    HeldError::Journal(_) => "journal",
+                    HeldError::Probes(_) => "probes",
+                    HeldError::Lock(_) => "lock",
+                };
+                tracing::warn!(reason, "interrupted operations reconciliation skipped");
+            })
+            .ok()
+            .and_then(|executor| {
+                lock_ledger(db, false)
+                    .inspect_err(|error| tracing::warn!(%error, "the ledger could not be locked"))
+                    .ok()
+                    .flatten()
+                    .map(|lock| (executor, lock))
+            })
     };
     if let Some((executor, _lock)) = &settling
         && let Err(error) = settle(executor, &mut ledger, clock)
@@ -615,6 +639,108 @@ mod interrupted {
         items.iter().map(|h| (h.operation, h.state)).collect()
     }
 
+    #[derive(Clone, Default)]
+    struct Captured(std::sync::Arc<std::sync::Mutex<String>>);
+
+    impl tracing::field::Visit for Captured {
+        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+            use std::fmt::Write as _;
+            let mut text = self
+                .0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            writeln!(text, "{}={value:?}", field.name())
+                .unwrap_or_else(|_| unreachable!("writing to a String cannot fail"));
+        }
+    }
+
+    impl tracing::Subscriber for Captured {
+        fn enabled(&self, _: &tracing::Metadata<'_>) -> bool {
+            true
+        }
+        fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+            tracing::span::Id::from_u64(1)
+        }
+        fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+        fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+        fn event(&self, event: &tracing::Event<'_>) {
+            event.record(&mut self.clone());
+        }
+        fn enter(&self, _: &tracing::span::Id) {}
+        fn exit(&self, _: &tracing::span::Id) {}
+    }
+
+    #[test]
+    fn unavailable_executor_logs_why_and_leaves_unsettled_operations_hidden()
+    -> Result<(), Box<dyn Error>> {
+        let fx = Fixture::build(&[])?;
+        let db = fx.path("index.db")?;
+        let mut store = ledger(&db)?;
+        // Journal-only fixtures: no files are moved, restored or removed.
+        for n in 1..=4 {
+            for event in [
+                QuarantineEvent::Journal,
+                QuarantineEvent::Move,
+                QuarantineEvent::Verify,
+                QuarantineEvent::Retain,
+            ]
+            .into_iter()
+            .take(usize::from(n))
+            {
+                store.journal(&JournalEntry {
+                    operation: op(n),
+                    event,
+                    at: SystemClock.now(),
+                    detail: serde_json::json!({}),
+                })?;
+            }
+        }
+        let before = store.operations()?;
+        for (failure, reason) in [
+            (HeldError::Location(LocationError::NoHome), "no_home"),
+            (
+                HeldError::Location(LocationError::NoLocalAppData),
+                "no_local_app_data",
+            ),
+            (HeldError::Privileged(PrivilegeError::Root), "root"),
+            (HeldError::Privileged(PrivilegeError::Elevated), "elevated"),
+            (
+                HeldError::Privileged(PrivilegeError::Token(std::io::Error::other(
+                    "private/path/token-detail",
+                ))),
+                "process_token",
+            ),
+        ] {
+            let failure = std::cell::RefCell::new(Some(failure));
+            let logs = Captured::default();
+            let items = tracing::subscriber::with_default(logs.clone(), || {
+                list_with(
+                    &db,
+                    &|| {
+                        Err(failure.borrow_mut().take().unwrap_or_else(|| {
+                            unreachable!("the executor factory is called only once")
+                        }))
+                    },
+                    &SystemClock,
+                )
+            })?;
+            assert_eq!(states(&items), [(op(4), QuarantineState::Retained)]);
+            assert_eq!(store.operations()?, before, "the journal is unchanged");
+            let text = logs
+                .0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            assert!(
+                text.contains("interrupted operations reconciliation skipped"),
+                "{text}"
+            );
+            assert!(text.contains(&format!("reason={reason:?}")), "{text}");
+            assert!(!text.contains(&db.display().to_string()), "{text}");
+            assert!(!text.contains("private/path/token-detail"), "{text}");
+        }
+        Ok(())
+    }
+
     #[test]
     fn startup_reconciliation_lists_what_a_crash_left_once_and_only_once()
     -> Result<(), Box<dyn Error>> {
@@ -669,7 +795,12 @@ mod interrupted {
         // recorded nor in the store.
         std::fs::write(root.join("items/changed"), [8; 65])?;
         assert!(
-            list_with(&db, &|| None, &SystemClock)?.is_empty(),
+            list_with(
+                &db,
+                &|| Err(HeldError::Location(LocationError::NoHome)),
+                &SystemClock
+            )?
+            .is_empty(),
             "unsettled, nothing is listed"
         );
 
@@ -687,7 +818,7 @@ mod interrupted {
             reason: lumen_domain::QuarantineFailure::VerificationFailed,
             at: ItemLocation::Quarantine,
         };
-        let listed = list_with(&db, &|| Some(executor.clone()), &SystemClock)?;
+        let listed = list_with(&db, &|| Ok(executor.clone()), &SystemClock)?;
         assert_eq!(
             states(&listed),
             [
@@ -716,7 +847,7 @@ mod interrupted {
         // be in flight: nothing is settled, and it is not listed.
         let _other = lock_ledger(&db, false)?.ok_or("the lock is free")?;
         assert_eq!(reconcile_with(&db, &executor, &SystemClock)?, None);
-        let busy = list_with(&db, &|| Some(executor.clone()), &SystemClock)?;
+        let busy = list_with(&db, &|| Ok(executor.clone()), &SystemClock)?;
         assert_eq!(states(&busy), states(&listed[..2]));
         Ok(())
     }
