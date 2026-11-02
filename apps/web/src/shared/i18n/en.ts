@@ -453,7 +453,7 @@ export const en = {
     days: (days: number) =>
       days === 0 ? "Today" : `${count(days)} ${days === 1 ? "day" : "days"}`,
     restoreOnly: "Restore only",
-    afterFailure: "Lumen kept this here safely after a move went wrong. You can only restore it.",
+    afterFailure: "A move went wrong, so Lumen held this here safely. You can only restore it.",
     restore: "Restore",
     removeForGoodAsk: "Remove for good…",
     removeForGoodWarning:

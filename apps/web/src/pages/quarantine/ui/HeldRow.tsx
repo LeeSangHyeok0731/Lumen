@@ -12,7 +12,7 @@ import { type Done, daysHeld } from "../lib/outcome";
  * and time held, then the actions.
  */
 export const HELD_GRID =
-  "grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 @2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_5.5rem_5.5rem_12.5rem]";
+  "grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 @2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_5.5rem_7rem_12.5rem]";
 
 /**
  * One held item: restore it, or (only if it is retained, and only after a
@@ -87,7 +87,6 @@ export function HeldRow({
             {location}
           </span>
           <span
-            title={retained ? undefined : m.held.afterFailure}
             className={`col-start-2 row-start-2 flex items-center justify-end gap-1.5 text-[12px] tabular-nums @2xl:col-start-4 @2xl:row-start-1 @2xl:justify-start @2xl:text-[13px] ${retained ? "text-ink-2" : "text-attention"}`}
           >
             <DecisionMark status={retained ? "held" : "attention"} />
@@ -117,6 +116,11 @@ export function HeldRow({
             )}
           </div>
         </div>
+        {!retained && (
+          <p className="mt-1 text-[12px] leading-snug text-ink-2 @2xl:text-[13px]">
+            {m.held.afterFailure}
+          </p>
+        )}
         {retained && confirming && !selecting && (
           <div className={`${CONFIRM_ROW} mt-2`}>
             <p id={warning} className="min-w-0 flex-1 basis-64 text-ink">
