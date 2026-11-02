@@ -20,7 +20,7 @@ use lumen_domain::{
 };
 use lumen_store_sqlite::{IndexStore, LedgerStore, StoreError, open_index, open_ledger};
 
-use crate::assess::{AssessError, tool_action};
+use crate::assess::{AssessError, DecisionFailures, tool_action};
 
 /// The rule that leaves an item for its tool's own command.
 const TOOL_ACTION: &str = "classify.devkb-tool-action";
@@ -116,7 +116,8 @@ fn carry_demotions(
     assessed: Vec<Assessed>,
     demoted: &BTreeMap<FileIdentity, Judgment>,
 ) -> Vec<Assessed> {
-    assessed
+    let mut failures = DecisionFailures::default();
+    let carried = assessed
         .into_iter()
         .filter_map(|mut item| {
             if item.decision.verdict() != Verdict::Quarantine {
@@ -127,12 +128,17 @@ fn carry_demotions(
             };
             let mut input = item.input.clone();
             input.jev = Some(judgment.clone());
-            let decision = lumen_policy::evaluate(&input).ok()?;
+            let decision = failures.record(lumen_policy::evaluate(&input), "recorded_demotion")?;
             item.reasons = lumen_policy::explain(&decision);
             item.decision = decision;
             Some(item)
         })
-        .collect()
+        .collect();
+    tracing::info!(
+        undecided = failures.undecided,
+        "recorded demotions finished"
+    );
+    carried
 }
 
 /// Each item's latest judgment that demoted it to review since the latest

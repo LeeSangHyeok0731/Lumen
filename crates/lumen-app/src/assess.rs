@@ -836,6 +836,50 @@ fn jev_request(
     lumen_jev::request::build(&candidate, env).ok()
 }
 
+/// Counts decisions that could not be made, without retaining private errors.
+#[derive(Default)]
+pub(crate) struct DecisionFailures {
+    pub(crate) undecided: usize,
+}
+
+impl DecisionFailures {
+    pub(crate) fn record<T>(
+        &mut self,
+        result: Result<T, lumen_policy::PolicyError>,
+        stage: &'static str,
+    ) -> Option<T> {
+        if let Ok(decided) = result {
+            Some(decided)
+        } else {
+            self.undecided += 1;
+            // Counts and outcomes only: error texts can carry paths (ADR-0022).
+            tracing::warn!(stage, "candidate decision failed; item omitted");
+            None
+        }
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct JudgeOutcomes {
+    answered: usize,
+    rejected: usize,
+    unavailable: usize,
+}
+
+impl JudgeOutcomes {
+    fn count(validations: impl Iterator<Item = lumen_domain::TraceValidation>) -> Self {
+        let mut outcomes = Self::default();
+        for validation in validations {
+            match validation {
+                lumen_domain::TraceValidation::Accepted => outcomes.answered += 1,
+                lumen_domain::TraceValidation::Rejected(_) => outcomes.rejected += 1,
+                lumen_domain::TraceValidation::Unavailable => outcomes.unavailable += 1,
+            }
+        }
+        outcomes
+    }
+}
+
 /// Assesses the latest completed scan in `db`, consulting `judge` when it is
 /// configured (a `NoopJudge` never is), then asking `describer` what kind of
 /// item each of up to 20 of the largest review items is (ADR-0041). A
@@ -875,6 +919,7 @@ pub fn assess_with_progress(
     let total = Some(u64::try_from(candidates.len()).unwrap_or(u64::MAX));
     report(progress, AssessStage::Deciding, 0, total);
     let counter = std::cell::Cell::new(0_u32);
+    let mut failures = DecisionFailures::default();
     let now = clock.now();
     let request = |input: &lumen_policy::PolicyInput| {
         counter.set(counter.get().saturating_add(1));
@@ -889,9 +934,12 @@ pub fn assess_with_progress(
             let inner = nested(candidate, &candidates);
             let subtree = assessment.subtree_without(&candidate.path, &inner)?;
             let sources = assessment.sources(&subtree);
-            if let Ok(decided) = block_on(decide_candidate(
-                candidate, &sources, probes, judge, clock, &request,
-            )) {
+            if let Some(decided) = failures.record(
+                block_on(decide_candidate(
+                    candidate, &sources, probes, judge, clock, &request,
+                )),
+                "assessment",
+            ) {
                 assessed.push(decided);
             }
             report(
@@ -924,12 +972,23 @@ pub fn assess_with_progress(
             .filter(|a| a.decision.verdict() == verdict)
             .count()
     };
+    let judge_outcomes = JudgeOutcomes::count(
+        assessed
+            .iter()
+            .filter_map(|a| a.trace.as_ref().map(|t| t.validation)),
+    );
     tracing::info!(
-        candidates = assessed.len(),
+        candidates = candidates.len(),
+        undecided = failures.undecided,
         keep = count(lumen_domain::Verdict::Keep),
         review = count(lumen_domain::Verdict::Review),
         quarantine = count(lumen_domain::Verdict::Quarantine),
-        jev_consulted = assessed.iter().filter(|a| a.trace.is_some()).count(),
+        // Consulted counts attempts; only answered counts accepted judgments.
+        jev_consulted =
+            judge_outcomes.answered + judge_outcomes.rejected + judge_outcomes.unavailable,
+        jev_answered = judge_outcomes.answered,
+        jev_rejected = judge_outcomes.rejected,
+        jev_unavailable = judge_outcomes.unavailable,
         jev_described = assessed.iter().filter(|a| a.note_trace.is_some()).count(),
         elapsed_ms = u64::try_from(timer.elapsed().as_millis()).unwrap_or(u64::MAX),
         "assessment finished"
@@ -949,6 +1008,51 @@ mod tests {
     use lumen_policy::{Observed, PolicyInput};
 
     use super::*;
+
+    #[test]
+    fn failed_decisions_are_counted_without_offering_an_item() {
+        let mut failures = DecisionFailures::default();
+        for stage in ["assessment", "recorded_demotion"] {
+            assert_eq!(failures.record(Ok(7), stage), Some(7));
+            assert_eq!(
+                failures.record::<u8>(
+                    Err(lumen_policy::PolicyError::RuleId("/private/path".into())),
+                    stage,
+                ),
+                None,
+            );
+        }
+        assert_eq!(failures.undecided, 2);
+    }
+
+    #[test]
+    fn judge_outcomes_distinguish_answers_from_failed_consultations() {
+        use lumen_domain::{JudgmentRejection, TraceValidation};
+
+        let outcomes = JudgeOutcomes::count(
+            [
+                Some(TraceValidation::Accepted),
+                None,
+                Some(TraceValidation::Rejected(JudgmentRejection::NoEvidence)),
+                Some(TraceValidation::Unavailable),
+                Some(TraceValidation::Accepted),
+            ]
+            .into_iter()
+            .flatten(),
+        );
+        assert_eq!(
+            outcomes,
+            JudgeOutcomes {
+                answered: 2,
+                rejected: 1,
+                unavailable: 1
+            }
+        );
+        assert_eq!(
+            JudgeOutcomes::count(std::iter::empty()),
+            JudgeOutcomes::default()
+        );
+    }
 
     fn scanned(path: &str, file: u128, bytes: u64) -> FilesystemEntry {
         let size = SizeFacts {
