@@ -54,7 +54,6 @@ export const ko = {
       title: "시동 디스크",
       meter: "디스크 사용량",
       used: (size: string) => `사용 ${size}`,
-      available: (size: string) => `남은 공간 ${size}`,
       total: (size: string) => `전체 ${size}`,
       percentUsed: (percent: string) => `${percent}% 사용 중`,
       assessed: (size: string) => `살펴본 항목 ${size}`,
@@ -63,9 +62,6 @@ export const ko = {
     },
     session: {
       title: "최근 검사",
-      canFree: "정리 제안",
-      command: "명령으로 정리",
-      review: "검토 필요",
       quarantine: "격리함",
       atLeast: (size: string) => `최소 ${size}`,
       found: (n: string) => `${n}개 읽었어요`,
@@ -178,13 +174,8 @@ export const ko = {
     canFree: (size: string) => `${size}를 정리할 수 있어요`,
     nothingTitle: "정리할 항목이 없어요",
     nothing: "Lumen은 앱이 다시 만드는 캐시처럼 안전 규칙이 허용하는 항목만 제안해요.",
-    filter: "표시",
     filters: {
       all: "전체",
-      quarantine: "정리 제안",
-      command: "명령으로 정리",
-      review: "검토 필요",
-      keep: "유지",
     },
     groups: {
       command: "명령으로 정리",

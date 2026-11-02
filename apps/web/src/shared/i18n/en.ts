@@ -47,7 +47,6 @@ export const en = {
       title: "Startup disk",
       meter: "Disk usage",
       used: (size: string) => `${size} used`,
-      available: (size: string) => `${size} available`,
       total: (size: string) => `${size} total`,
       percentUsed: (percent: string) => `${percent}% used`,
       assessed: (size: string) => `Assessed: ${size}`,
@@ -56,9 +55,6 @@ export const en = {
     },
     session: {
       title: "Last scan",
-      canFree: "Proposed for clean-up",
-      command: "Clean up with its own command",
-      review: "Needs review",
       quarantine: "In Quarantine",
       atLeast: (size: string) => `at least ${size}`,
       found: (n: string) => `${n} read`,
@@ -174,13 +170,8 @@ export const en = {
     nothingTitle: "Nothing to clean up",
     nothing:
       "Lumen proposes only items its safety rules allow, such as caches their app re-creates.",
-    filter: "Show",
     filters: {
       all: "All",
-      quarantine: "Proposed",
-      command: "Clean up with its own command",
-      review: "Needs review",
-      keep: "Kept",
     },
     groups: {
       command: "Clean up with its own command",

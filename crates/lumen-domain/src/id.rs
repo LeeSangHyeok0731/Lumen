@@ -71,11 +71,6 @@ macro_rules! uuid_id {
                     Ok(Self(uuid))
                 }
             }
-
-            /// The underlying UUID.
-            pub const fn as_uuid(&self) -> &Uuid {
-                &self.0
-            }
         }
 
         impl fmt::Display for $name {
