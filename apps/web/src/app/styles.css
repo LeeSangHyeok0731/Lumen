@@ -481,6 +481,11 @@
   border-radius: 4px;
 }
 
+.map-frame[data-phase="assessment"] {
+  border-color: var(--lm-accent);
+  border-style: solid;
+}
+
 .map-frame > .topo-label {
   color: var(--lm-ink-2);
 }
@@ -497,6 +502,29 @@
   transition: width 400ms ease-out;
 }
 
+.map-assessment {
+  background: var(--lm-accent-soft);
+  transition:
+    width 180ms cubic-bezier(0.2, 0.7, 0.3, 1),
+    background-color 180ms ease-out;
+}
+
+.map-assessment[data-indeterminate="true"] {
+  width: 38%;
+  background: var(--lm-accent);
+  animation: map-assessment-indeterminate 1.8s ease-in-out infinite alternate;
+  opacity: 0.2;
+}
+
+@keyframes map-assessment-indeterminate {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(160%);
+  }
+}
+
 /* Decisions arrive at once: the map's regions fade in together. */
 @keyframes topo-in {
   from {
@@ -511,7 +539,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .map-read {
+  .map-read,
+  .map-assessment {
     transition: none;
+  }
+
+  .map-assessment[data-indeterminate="true"] {
+    width: 100%;
+    animation: none;
+    opacity: 0.5;
   }
 }

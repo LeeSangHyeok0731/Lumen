@@ -1,5 +1,4 @@
 import type { AssessProgressView, ScanProgressView } from "@lumen/api-client";
-import { AssessmentProgress } from "@/entities/scan-session";
 import { countFormat, useI18n } from "@/shared/i18n";
 import { FlowStage } from "./FlowStage";
 import { MapFrame } from "./MapFrame";
@@ -54,11 +53,6 @@ export function ProgressPanel({
         </StepHeading>
         <p className="text-ink-2">{deciding ? m.scanning.decidingHint : m.scanning.readOnly}</p>
       </div>
-      {deciding && (
-        <div className="max-w-4xl">
-          <AssessmentProgress progress={assessmentProgress} />
-        </div>
-      )}
       <dl className="flex flex-wrap gap-x-12 gap-y-4">
         <Stat label={m.scanning.items} value={progress ? count(progress.entries) : none} />
         <Stat
@@ -78,7 +72,11 @@ export function ProgressPanel({
           </span>
         </p>
       )}
-      <MapFrame read={progress?.allocated_bytes ?? "0"} />
+      <MapFrame
+        read={progress?.allocated_bytes ?? "0"}
+        deciding={deciding}
+        assessmentProgress={assessmentProgress}
+      />
     </section>
   );
 }
