@@ -81,6 +81,23 @@ enum Seen {
     Hidden,
 }
 
+/// Classifies an unavailable fd listing without consulting ambient errno.
+fn fd_listing_failure(errno: Option<c_int>) -> Seen {
+    if errno == Some(libc::ESRCH) {
+        Seen::Clean
+    } else {
+        Seen::Hidden
+    }
+}
+
+/// The process's thread-local errno, read immediately after a failed libproc call.
+fn current_errno() -> c_int {
+    // SAFETY: `__error` returns this thread's valid errno pointer on macOS.
+    // Why unsafe: dereferencing the pointer returned by the libc accessor.
+    // Why it holds: the accessor is defined to return the calling thread's errno.
+    unsafe { *libc::__error() }
+}
+
 /// The bytes of a fixed-size C path buffer, up to its NUL.
 fn c_path(path: &[[libc::c_char; 32]; 32]) -> Vec<u8> {
     path.iter()
@@ -106,17 +123,21 @@ fn pid_info<T: Copy>(pid: c_int, flavor: c_int, arg: u64) -> Option<T> {
     (written == size).then(|| unsafe { out.assume_init() })
 }
 
-/// The open file descriptors of `pid`, or `None` if they cannot be read.
-fn fds(pid: c_int) -> Option<Vec<libc::proc_fdinfo>> {
+/// The open file descriptors of `pid`, or the errno observed at a failed libproc call.
+fn fds(pid: c_int) -> Result<Vec<libc::proc_fdinfo>, Option<c_int>> {
     // SAFETY: invariant: a null buffer of size 0 only queries the needed size.
     // Why unsafe: FFI call. Why it holds: documented sizing call.
     let needed =
         unsafe { libc::proc_pidinfo(pid, libc::PROC_PIDLISTFDS, 0, std::ptr::null_mut(), 0) };
-    let needed = usize::try_from(needed).ok().filter(|n| *n > 0)?;
+    let errno = (needed < 0).then(current_errno);
+    let needed = usize::try_from(needed)
+        .ok()
+        .filter(|n| *n > 0)
+        .ok_or(errno)?;
     // Room for descriptors opened between the two calls.
     let capacity = needed / size_of::<libc::proc_fdinfo>() + 32;
     let mut list: Vec<libc::proc_fdinfo> = Vec::with_capacity(capacity);
-    let bytes = c_int::try_from(capacity * size_of::<libc::proc_fdinfo>()).ok()?;
+    let bytes = c_int::try_from(capacity * size_of::<libc::proc_fdinfo>()).map_err(|_| None)?;
     // SAFETY: invariant: the kernel writes at most `bytes` bytes into the
     // vector's spare capacity. Why unsafe: FFI writing into uninitialised memory.
     // Why it holds: `bytes` is exactly the allocated capacity in bytes.
@@ -129,12 +150,13 @@ fn fds(pid: c_int) -> Option<Vec<libc::proc_fdinfo>> {
             bytes,
         )
     };
-    let count = usize::try_from(written).ok()? / size_of::<libc::proc_fdinfo>();
+    let errno = (written < 0).then(current_errno);
+    let count = usize::try_from(written).map_err(|_| errno)? / size_of::<libc::proc_fdinfo>();
     // SAFETY: invariant: the first `count` elements are initialised. Why unsafe:
     // `set_len`. Why it holds: the kernel wrote `written` bytes, which is
     // `count` whole `proc_fdinfo` records, and `count <= capacity`.
     unsafe { list.set_len(count.min(capacity)) };
-    Some(list)
+    Ok(list)
 }
 
 fn vnode_of(pid: c_int, fd: i32) -> Option<VnodeFdInfoWithPath> {
@@ -169,13 +191,9 @@ fn executable(pid: c_int) -> Option<Vec<u8>> {
 }
 
 fn inspect(pid: c_int, target: &Target) -> Seen {
-    let Some(open) = fds(pid) else {
-        // A process that exited cannot use anything; one we may not inspect can.
-        return if std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH) {
-            Seen::Clean
-        } else {
-            Seen::Hidden
-        };
+    let open = match fds(pid) {
+        Ok(open) => open,
+        Err(errno) => return fd_listing_failure(errno),
     };
     let exe = executable(pid);
     let exe_matches = exe.as_deref().is_some_and(|path| {
@@ -309,6 +327,16 @@ mod tests {
     use lumen_domain::{FileId, RawPath};
 
     use super::*;
+
+    #[test]
+    fn fd_listing_failure_only_treats_captured_esrch_as_clean() {
+        assert!(matches!(fd_listing_failure(Some(libc::ESRCH)), Seen::Clean));
+        assert!(matches!(
+            fd_listing_failure(Some(libc::EACCES)),
+            Seen::Hidden
+        ));
+        assert!(matches!(fd_listing_failure(None), Seen::Hidden));
+    }
 
     #[test]
     fn the_mirrored_struct_matches_the_sdk() {
