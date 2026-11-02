@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { useId } from "react";
 import { heldTotal, inQuarantine, useHeld } from "@/entities/held";
 import {
@@ -96,7 +96,6 @@ function Running() {
  * there is none.
  */
 export function LastScan() {
-  const navigate = useNavigate();
   const { m } = useI18n();
   const session = useScanSession();
   const held = useHeld();
@@ -133,9 +132,13 @@ export function LastScan() {
       {summary !== null && !running && (
         <DecisionMap
           summary={summary}
-          selected={null}
-          onSelect={(status) => {
-            void navigate({ to: "/clean", search: status === null ? {} : { show: status } });
+          choice={{
+            kind: "link",
+            link: (status, content, className) => (
+              <Link to="/clean" search={{ show: status }} className={className}>
+                {content}
+              </Link>
+            ),
           }}
         />
       )}

@@ -104,9 +104,12 @@ export function Results({
         <>
           <DecisionMap
             summary={summary}
-            selected={filter === "all" ? null : filter}
-            onSelect={(status) => onFilterChange(status ?? "all")}
-            withAll
+            choice={{
+              kind: "filter",
+              selected: filter === "all" ? null : filter,
+              onSelect: (status) => onFilterChange(status ?? "all"),
+              withAll: true,
+            }}
             accessory={<InfoTip term="verdicts" />}
             track={false}
           />
