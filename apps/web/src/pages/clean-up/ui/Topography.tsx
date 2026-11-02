@@ -36,6 +36,39 @@ function groupName(m: ReturnType<typeof useI18n>["m"], group: TopoGroup): string
   return group.source ?? m.results.otherTools;
 }
 
+export function appIconLabel(source: string | null): string | null {
+  const text = source?.trim();
+  if (!text) {
+    return null;
+  }
+  const initials = text
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
+    .flatMap((part) => part.slice(0, 2).split(/(?=[A-Z0-9])/))
+    .map((part) => part.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ""))
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+  return initials || null;
+}
+
+export function showAppIcon(width: number, height: number): boolean {
+  return width >= 100 && height >= 64;
+}
+
+function AppIcon({ source }: { readonly source: string | null }) {
+  const label = appIconLabel(source);
+  if (!label) {
+    return null;
+  }
+  return (
+    <span className="topo-app-icon" aria-hidden="true" title={source ?? undefined}>
+      {label}
+    </span>
+  );
+}
+
 /**
  * The storage topography (docs/design/visual-language.md): every assessed
  * item as a region sized by what it would free, grouped by kind and tool.
@@ -242,6 +275,7 @@ function Region({
   const name = baseName(node.candidate.path);
   const mark = lensMark(lens, node.candidate.path);
   const lowered = !shows(filter, node.candidate) || mark === "lowered";
+  const canShowIcon = label === "full" && showAppIcon(box.width, box.height);
   return (
     <button
       type="button"
@@ -258,7 +292,12 @@ function Region({
     >
       {label !== "none" && (
         <span className="topo-label">
-          {label === "full" && <span className="truncate">{name}</span>}
+          {label === "full" && (
+            <span className="topo-label-name">
+              {canShowIcon && <AppIcon source={node.candidate.group.source} />}
+              <span className="truncate">{name}</span>
+            </span>
+          )}
           <span>{size}</span>
         </span>
       )}

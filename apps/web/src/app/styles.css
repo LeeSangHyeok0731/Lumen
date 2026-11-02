@@ -454,6 +454,36 @@
   white-space: nowrap;
 }
 
+.topo-label-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.topo-label-name > .truncate {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topo-app-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  font-size: 8px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--lm-ink-2);
+  background: var(--lm-fill);
+  border: 1px solid var(--lm-line-strong);
+}
+
 .topo-label > * {
   overflow: hidden;
   text-overflow: ellipsis;
