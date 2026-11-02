@@ -7,12 +7,8 @@
 //! an exact Clopper–Pearson 95% upper bound, which is what the gate checks.
 
 use std::collections::BTreeSet;
-use std::future::Future;
-use std::pin::pin;
-use std::sync::Arc;
-use std::task::{Context, Poll, Wake, Waker};
-use std::thread::{self, Thread};
 
+pub use lumen_app::block_on;
 use lumen_application::ports::{JudgeError, JudgeModel};
 use lumen_domain::{Assessment, JevRequest, JudgmentConfidence};
 use serde::{Deserialize, Serialize};
@@ -120,29 +116,6 @@ pub struct Report {
     /// every critical case was answered (a judge that fails only on the hard
     /// cases must not pass by staying silent).
     pub passed: bool,
-}
-
-/// Wakes the thread that is blocked on a future.
-struct Unpark(Thread);
-
-impl Wake for Unpark {
-    fn wake(self: Arc<Self>) {
-        self.0.unpark();
-    }
-}
-
-/// Drives `future` to completion on this thread. Judges are I/O-bound and
-/// answer one request at a time here, so no runtime is needed.
-pub fn block_on<F: Future>(future: F) -> F::Output {
-    let waker = Waker::from(Arc::new(Unpark(thread::current())));
-    let mut context = Context::from_waker(&waker);
-    let mut future = pin!(future);
-    loop {
-        if let Poll::Ready(output) = future.as_mut().poll(&mut context) {
-            return output;
-        }
-        thread::park();
-    }
 }
 
 fn grade(expected: &Expected, answer: &Result<lumen_domain::Judgment, JudgeError>) -> Grade {
