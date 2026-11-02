@@ -114,9 +114,12 @@ Dependency rules (enforced by Cargo, and checked in CI):
 | `SecretStore` | Credentials Lumen needs (the OpenRouter key), never in databases or logs | macOS Keychain, Windows Credential Manager |
 | `Clock`, `IdGenerator` | Deterministic time and IDs in tests | std / fakes |
 
-Ports for filesystem and OS inspection are **synchronous**. They run on the scan pool
-and are orchestrated by Tokio. Only network- or model-bound ports (`JudgeModel`) are
-async.
+Ports for filesystem and OS inspection are **synchronous**. They run on plain `std`
+threads: the scanner's scoped worker threads (`crates/lumen-scan/src/scheduler.rs`) or
+the calling thread. Only model-bound ports (`JudgeModel`, `Describer`) are async; there
+is no async runtime, and `lumen_app::block_on` (`crates/lumen-app/src/assess.rs`) runs
+their futures on the calling thread
+([ADR-0017 amendment](../decisions/0017-scan-engine-and-size-accounting.md#amendment-the-scheduler-uses-scoped-threads-and-lumens-own-token-2026-11-02)).
 
 ## 6. Domain model
 
@@ -323,9 +326,12 @@ See [ADR-0017](../decisions/0017-scan-engine-and-size-accounting.md) and
 
 - Modes: full, incremental (change feed), targeted (subtree or category), background
   (agent, low priority), cancel, and resume (checkpoints).
-- Pipeline: enumerator tasks (rayon pool, per-volume semaphores, priority bands) →
-  evidence collector → graph builder → single store writer, with bounded channels
-  between stages.
+- Pipeline: scoped `std` worker threads, one directory at a time from a shared queue
+  (`crates/lumen-scan/src/scheduler.rs`) → bounded channel → the calling thread, which
+  aggregates coverage and sizes and reports progress (`crates/lumen-app/src/scan.rs`) →
+  bounded channel → the single `index.db` writer thread
+  (`crates/lumen-store-sqlite/src/writer.rs`). Per-volume semaphores, priority bands
+  and a stall watchdog are not built yet.
 - Partial failure: per-directory errors become `Denied` or `Error` nodes; the scan
   continues and the coverage report records them.
 - Never hydrate placeholders, never open contents during scanning, never open archives.
@@ -470,8 +476,10 @@ Forecasts use the history of `ScanSnapshot` volume totals:
 - **Errors:** typed `thiserror` enums per crate with structured fields (operation,
   path handle, OS code); `anyhow` only in binaries; no silently ignored results
   (`let _ =` requires a justification comment).
-- **Concurrency:** one `CancellationToken` per operation; bounded channels; destructive
-  steps are uninterruptible journaled units; cancellation happens between items.
+- **Concurrency:** `std` threads and bounded `std::sync::mpsc` channels; no async
+  runtime. One `lumen_application::CancelToken` per operation
+  (`crates/lumen-application/src/cancel.rs`), checked by workers between units of work;
+  destructive steps are uninterruptible journaled units.
 - **Observability:** `tracing` with a redaction layer; local sinks; OpenTelemetry
   opt-in and content-free ([ADR-0022](../decisions/0022-privacy-preserving-observability.md)).
 - **Privacy:** no file contents leave the device; cloud Jev is metadata-only, and off

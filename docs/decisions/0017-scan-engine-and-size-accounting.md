@@ -1,6 +1,7 @@
 # ADR-0017: Scan with native batch enumerators on a work-stealing pool and account sizes precisely
 
-- Status: Accepted (macOS `PRIVATESIZE` pass amended by [ADR-0028](0028-macos-private-size-in-bulk-pass.md))
+- Status: Accepted (macOS `PRIVATESIZE` pass amended by [ADR-0028](0028-macos-private-size-in-bulk-pass.md);
+  scheduling and cancellation amended below)
 - Date: 2026-10-06
 
 ## Context and problem statement
@@ -49,7 +50,7 @@ Enumerators:
 - Linux (CI, development): `getdents64` + `statx` with a minimal mask.
 - Portable `std::fs` fallback for tests and mobile app containers.
 
-Scheduling:
+Scheduling (as decided; the amendment below records what was built instead):
 
 - Directory tasks on a sized `rayon` pool (cores − 1) with per-volume semaphores,
   priority bands (targeted > interactive > background), bounded channels between
@@ -76,6 +77,43 @@ Never hydrate: placeholder and dataless files (`SF_DATALESS`,
 `FILE_ATTRIBUTE_RECALL_ON_*`) are never opened or hashed. On macOS,
 `IOPOL_MATERIALIZE_DATALESS_FILES_OFF` is set process-wide as a backstop. Archives are
 never opened.
+
+### Amendment: the scheduler uses scoped threads and Lumen's own token (2026-11-02)
+
+The scheduling above named `rayon`, Tokio and `tokio-util`'s `CancellationToken`. No
+`Cargo.toml` in the workspace depends on any of them; the engine was built with the
+standard library instead, and this records what it does:
+
+- **Traversal.** `lumen_scan::scan` (`crates/lumen-scan/src/scheduler.rs`) runs
+  `ScanConfig::workers` scoped `std` threads (default: `available_parallelism`). They
+  take one directory at a time from a shared queue and send results through a bounded
+  `sync_channel` (default capacity 4096), so a slow consumer slows the workers. Work
+  items are whole directories, so a shared queue gives the same parallelism as a
+  work-stealing pool without a dependency (the module docs say why; the benchmarks in
+  roadmap 5.19 revisit it). There are no per-volume semaphores, priority bands or stall
+  watchdog yet.
+- **Consumer and store writer.** The calling thread receives the results, aggregates
+  coverage and sizes, and emits progress (`crates/lumen-app/src/scan.rs`). Records for
+  `index.db` go through a second bounded channel to one dedicated writer thread that
+  commits in batches (`crates/lumen-store-sqlite/src/writer.rs`).
+- **Cancellation.** `lumen_application::CancelToken`
+  (`crates/lumen-application/src/cancel.rs`) is a chain of `AtomicBool` flags: clones
+  share cancellation, and `child()` tokens are cancelled with their parent but not the
+  reverse. Callers create one token per operation; no caller makes per-volume children
+  yet. Workers check the token before each directory and on every entry, and the
+  calling thread polls it every 50 ms while waiting, so cancellation takes effect even
+  while a worker is blocked in a slow listing. Inventory sources check it between
+  items (`InventorySource::collect`).
+- **Async ports.** `JudgeModel` and `Describer` return boxed futures
+  (`crates/lumen-application/src/ports.rs`). There is no async runtime:
+  `lumen_app::block_on` (`crates/lumen-app/src/assess.rs`) polls the future on the
+  calling thread and parks it until woken. The OpenRouter adapter runs each blocking
+  `ureq` request on its own thread and wakes the future when the answer arrives
+  (`crates/lumen-jev/src/openrouter.rs`).
+
+The decision itself (native batch enumerators run as synchronous directory tasks, not
+`tokio::fs`) is unchanged. Adding Tokio or `rayon` later needs its own change with the
+dependency reasoning `AGENTS.md` asks for.
 
 ### Consequences
 
