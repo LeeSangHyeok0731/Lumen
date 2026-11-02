@@ -133,8 +133,10 @@ Motion explains a change of state and lasts 120–220 ms, `cubic-bezier(.2,.7,.3
   results arrive (one 220 ms crossfade, not per item).
 - The inspector slides 12 px and fades (160 ms).
 
-No pointer-following light, springs, parallax or looping decoration except the
-indeterminate progress line. `prefers-reduced-motion` makes every change instant.
+No pointer-following light, springs, parallax or looping decoration except
+indeterminate progress. The cleanup progress frame carries scan and assessment
+progress in the same surface; its indeterminate assessment fill moves within the
+frame. `prefers-reduced-motion` makes every change instant.
 
 ## Signature concepts and where they belong
 

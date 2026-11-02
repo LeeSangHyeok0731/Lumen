@@ -5,6 +5,7 @@ export {
   certaintyOfRule,
   certaintyOfSize,
 } from "./model/certainty";
+export { stagePercent } from "./model/progress";
 export {
   type AssessmentStatus,
   type ScanSession,
