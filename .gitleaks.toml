@@ -1,0 +1,22 @@
+# Extends gitleaks' default rules with patterns they miss.
+[extend]
+useDefault = true
+
+# Tauri updater (minisign) secret keys are stored base64-wrapped, so the
+# "untrusted comment: rsign encrypted secret key" header is not visible in plain
+# text and the default rules do not match it.
+[[rules]]
+id = "minisign-base64-secret-key"
+description = "Base64-wrapped minisign secret key"
+regex = '''(dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5[A-Za-z0-9+/=]{40,})'''
+secretGroup = 1
+keywords = ["dW50cnVzdGVk"]
+
+# A stray test key was committed in 772c349 (#586) and removed later. It stays
+# in history, so ignore only that file in that commit (both must match). Its
+# public key is not the updater pubkey in apps/desktop/src-tauri/tauri.conf.json.
+[[rules.allowlists]]
+description = "Stray updater test key from 772c349, already removed"
+condition = "AND"
+commits = ["772c349898ea8583b6e4f50d16bc80d78670b9d4"]
+paths = ['''^apps/signtest\.20RV/k\.key$''']
