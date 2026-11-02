@@ -1,5 +1,6 @@
 import type { CandidateView, RootView } from "@lumen/api-client";
 import { describe, expect, it } from "vitest";
+import { appIconLabel, showAppIcon } from "../ui/Topography";
 import type { Rect } from "./squarify";
 import {
   candidatesIn,
@@ -44,6 +45,21 @@ function area(placed: Placed): number {
 function idOf(placed: Placed): string {
   return placed.region.type === "node" ? placed.region.node.id : placed.region.id;
 }
+
+describe("app icon rules", () => {
+  it("derives short glyphs from the application or tool name", () => {
+    expect(appIconLabel("Xcode")).toBe("X");
+    expect(appIconLabel("Google Chrome")).toBe("GC");
+    expect(appIconLabel("com.example.app")).toBe("CE");
+    expect(appIconLabel(null)).toBeNull();
+  });
+
+  it("keeps icons for larger tiles and hides them for tighter layouts", () => {
+    expect(showAppIcon(160, 120)).toBe(true);
+    expect(showAppIcon(100, 70)).toBe(true);
+    expect(showAppIcon(90, 60)).toBe(false);
+  });
+});
 
 describe("topographyOf", () => {
   it("groups by kind, and developer tools by tool when there are several", () => {

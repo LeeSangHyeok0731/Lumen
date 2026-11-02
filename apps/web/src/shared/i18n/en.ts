@@ -62,6 +62,7 @@ export const en = {
       quarantine: "In Quarantine",
       atLeast: (size: string) => `at least ${size}`,
       found: (n: string) => `${n} read`,
+      openExplore: "Open Explore",
       showProgress: "Show progress",
       cleaned: (n: number, size: string) => `${items(n)} (${size}) moved to Quarantine.`,
       none: "No scan yet. Scan your disk to explore its contents and the evidence behind each decision.",
@@ -432,6 +433,10 @@ export const en = {
         ]
           .filter((sentence) => sentence !== null)
           .join(" "),
+      unverified: (n: number) =>
+        n === 1
+          ? "1 restored item does not exactly match its record, so check it."
+          : `${count(n)} restored items do not exactly match their record, so check them.`,
       removedStopped: (well: number, total: number, untried: number) =>
         [
           `Removed ${count(well)} of ${items(total)} for good, then an error stopped Lumen.`,

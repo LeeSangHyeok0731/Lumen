@@ -81,9 +81,18 @@ export function sectionsOf(candidates: readonly CandidateView[]): KindSection[] 
     }
     const sources =
       kind === "developer"
-        ? [...Map.groupBy(items, (c) => c.group.source)]
-            .map(([source, members]) => groupOf(source, members))
-            .toSorted(bySize)
+        ? (() => {
+            const bySource = new Map<string | null, CandidateView[]>();
+            for (const item of items) {
+              const source = item.group.source;
+              const members = bySource.get(source) ?? [];
+              members.push(item);
+              bySource.set(source, members);
+            }
+            return [...bySource]
+              .map(([source, members]) => groupOf(source, members))
+              .toSorted(bySize);
+          })()
         : [groupOf(null, items)];
     return [
       {
