@@ -23,5 +23,5 @@ export {
 } from "./model/summary";
 export { AssessmentProgress } from "./ui/AssessmentProgress";
 export { CertaintyDot } from "./ui/CertaintyDot";
-export { DecisionMap } from "./ui/DecisionMap";
+export { type DecisionChoice, DecisionMap } from "./ui/DecisionMap";
 export { DecisionMark, type Mark } from "./ui/DecisionMark";
