@@ -61,7 +61,9 @@ flat indigo icon. The 1,254 px original was scaled to the 1,024 px master
 (`icon.icns`, `icon.ico`, the PNG sizes), and the website (`apps/site/public/icon.png`,
 `favicon.png`, `apple-touch-icon.png`) and the app's sidebar mark and favicon
 (`apps/web/public/icon.png`, `favicon.png`) use downscaled copies. It stays legible at
-32 px on light and dark backgrounds.
+32 px on light and dark backgrounds. The master is center-cropped around the white plate
+and scaled to the canvas to remove the unused transparent inset; all derived icon sizes
+are regenerated from it.
 
 Prompt (the shared style above, adapted to a macOS icon):
 
@@ -72,8 +74,8 @@ restrained sculptural 3D object, silver and warm-white surfaces with one soft co
 accent, subtle translucent glass, satin ceramic, softly beveled precise geometry. Soft studio
 lighting from upper left, realistic ambient occlusion and delicate contact shadows.
 
-Icon format: a 1024x1024 canvas with a transparent background. Inside it, a macOS-style
-rounded-square plate (continuous-corner "squircle") about 824x824 px, centered, with a soft
+Icon format: a 1024x1024 canvas with a transparent background and no inset padding. A
+macOS-style rounded-square plate (continuous-corner "squircle") fills the canvas, with a soft
 drop shadow under the plate only. The plate is satin warm-white with a very subtle top-to-bottom
 tonal shift, no pattern.
 
