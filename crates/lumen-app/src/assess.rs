@@ -10,17 +10,13 @@
 
 use std::collections::{BTreeSet, HashSet};
 use std::path::Path;
-use std::pin::pin;
-use std::sync::{Arc, OnceLock};
-use std::task::{Context as TaskContext, Poll, Wake, Waker};
-use std::thread::{self, Thread};
 
-use lumen_application::assess::{Assessed, Probes, Sources, decide_candidate, nested, select};
+use lumen_application::assess::{Assessed, Sources, decide_candidate, nested, select};
 use lumen_application::collect::{Inventory, ScanDomains, summarize};
 use lumen_application::gather::gather;
 use lumen_application::large::LargeFolders;
 use lumen_application::observe::below;
-use lumen_application::ports::{Clock, InUseProbe, InventoryReport, OwnershipProbe};
+use lumen_application::ports::{Clock, InventoryReport};
 use lumen_devkb::{Environment, KnowledgeBase, Markers, Root};
 use lumen_domain::{
     CleanupMechanism, Evidence, Fact, Platform, PlatformCapabilities, RawPath, Relationship,
@@ -29,6 +25,9 @@ use lumen_domain::{
 use lumen_policy::Context;
 use lumen_store_sqlite::{IndexStore, StoreError, open_index};
 
+pub(crate) use crate::knowledge::builtin_knowledge_base;
+pub use crate::probes::with_probes;
+pub use crate::runtime::block_on;
 use crate::space::{self, RECORD_BYTES, SpaceError};
 
 /// Why an assessment could not run.
@@ -51,42 +50,6 @@ pub enum AssessError {
     /// cannot be measured.
     #[error(transparent)]
     Space(#[from] SpaceError),
-}
-
-/// Runs `future` to completion on this thread.
-pub fn block_on<F: Future>(future: F) -> F::Output {
-    struct Unpark(Thread);
-    impl Wake for Unpark {
-        fn wake(self: Arc<Self>) {
-            self.0.unpark();
-        }
-    }
-    let waker = Waker::from(Arc::new(Unpark(thread::current())));
-    let mut future = pin!(future);
-    loop {
-        if let Poll::Ready(value) = future.as_mut().poll(&mut TaskContext::from_waker(&waker)) {
-            return value;
-        }
-        thread::park();
-    }
-}
-
-/// A probe for platforms without one: every answer is unknown, so nothing is
-/// ever eligible there.
-#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
-struct NoInUseProbe;
-
-#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
-impl InUseProbe for NoInUseProbe {
-    fn probe(
-        &self,
-        _path: &RawPath,
-        _expected: &lumen_domain::FileIdentity,
-    ) -> lumen_application::ports::InUse {
-        lumen_application::ports::InUse::Unknown {
-            reason: "no in-use probe on this platform",
-        }
-    }
 }
 
 const fn platform() -> Platform {
@@ -285,46 +248,6 @@ fn platform_contributions(
     _times: (lumen_domain::Timestamp, lumen_domain::Timestamp),
 ) -> Contributions {
     Contributions::default()
-}
-
-/// The platform's probes and their source names.
-///
-/// # Errors
-///
-/// [`AssessError::SourceName`] if a probe's name is invalid (never in
-/// practice: the names are constants).
-pub fn with_probes<T>(run: impl FnOnce(&Probes<'_>) -> T) -> Result<T, AssessError> {
-    #[cfg(target_os = "macos")]
-    let (in_use, in_use_name): (Box<dyn InUseProbe>, &str) = (
-        Box::new(lumen_platform_macos::ProcessProbe),
-        "macos.process-probe",
-    );
-    #[cfg(windows)]
-    let (in_use, in_use_name): (Box<dyn InUseProbe>, &str) = (
-        Box::new(lumen_platform_windows::RestartManagerProbe),
-        "windows.restart-manager",
-    );
-    #[cfg(target_os = "linux")]
-    let (in_use, in_use_name): (Box<dyn InUseProbe>, &str) =
-        (Box::new(lumen_scan::ProcProbe), "linux.proc");
-    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
-    let (in_use, in_use_name): (Box<dyn InUseProbe>, &str) = (Box::new(NoInUseProbe), "none");
-    #[cfg(unix)]
-    let (ownership, ownership_name): (Box<dyn OwnershipProbe>, &str) =
-        (Box::new(lumen_scan::UnixOwnershipProbe), "unix.owner");
-    #[cfg(windows)]
-    let (ownership, ownership_name): (Box<dyn OwnershipProbe>, &str) = (
-        Box::new(lumen_platform_windows::HandleEnumerator),
-        "windows.owner-sid",
-    );
-    let in_use_source = SourceName::new(in_use_name)?;
-    let ownership_source = SourceName::new(ownership_name)?;
-    Ok(run(&Probes {
-        in_use: in_use.as_ref(),
-        in_use_source: &in_use_source,
-        ownership: ownership.as_ref(),
-        ownership_source: &ownership_source,
-    }))
 }
 
 /// Scanned entries are read this many at a time, so an assessment's memory
@@ -729,14 +652,6 @@ pub struct ToolGuidance {
     /// The item cannot be regenerated, so the command removes data, not
     /// just caches (Docker's disk image).
     pub removes_data: bool,
-}
-
-/// The built-in knowledge base, loaded once; `None` if it does not load.
-pub(crate) fn builtin_knowledge_base() -> Option<&'static KnowledgeBase> {
-    static KNOWLEDGE_BASE: OnceLock<Option<KnowledgeBase>> = OnceLock::new();
-    KNOWLEDGE_BASE
-        .get_or_init(|| KnowledgeBase::builtin().ok())
-        .as_ref()
 }
 
 /// The cleanup command of the tool whose knowledge-base entry `assessed`
