@@ -120,10 +120,19 @@ pub struct QuarantineReport {
 /// This installation's device ID, kept next to the database.
 fn device(db: &Path, ids: &dyn IdGenerator) -> Result<DeviceId, QuarantineError> {
     let path = db.with_file_name("device-id");
-    if let Ok(text) = std::fs::read_to_string(&path) {
-        return text.trim().parse().map_err(|_| {
-            QuarantineError::Device(format!("{} is not a device ID", path.display()))
-        });
+    match std::fs::read_to_string(&path) {
+        Ok(text) => {
+            return text.trim().parse().map_err(|_| {
+                QuarantineError::Device(format!("{} is not a device ID", path.display()))
+            });
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(QuarantineError::Device(format!(
+                "{}: {error}",
+                path.display()
+            )));
+        }
     }
     // A fresh time-ordered ID; the operation ID generator gives one.
     let id: DeviceId = ids
@@ -330,4 +339,91 @@ pub fn quarantine(
         moved,
         warnings,
     })
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic, clippy::disallowed_methods)]
+mod device_tests {
+    use super::device;
+    use lumen_application::ports::IdGenerator;
+    use lumen_domain::{DeviceId, OperationId, PlanId, ScanId, SnapshotId};
+    struct TempDir(std::path::PathBuf);
+    impl TempDir {
+        fn new() -> Self {
+            let path =
+                std::env::temp_dir().join(format!("lumen-device-test-{}", std::process::id()));
+            match std::fs::create_dir(&path) {
+                Ok(()) => Self(path),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    static NEXT: std::sync::atomic::AtomicU64 =
+                        std::sync::atomic::AtomicU64::new(0);
+                    let path = std::env::temp_dir().join(format!(
+                        "lumen-device-test-{}-{}",
+                        std::process::id(),
+                        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                    ));
+                    std::fs::create_dir(&path).unwrap();
+                    Self(path)
+                }
+                Err(error) => panic!("could not create temporary test directory: {error}"),
+            }
+        }
+        fn path(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            std::fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+
+    struct FixedIds;
+    impl IdGenerator for FixedIds {
+        fn scan_id(&self) -> ScanId {
+            unreachable!()
+        }
+        fn snapshot_id(&self) -> SnapshotId {
+            unreachable!()
+        }
+        fn plan_id(&self) -> PlanId {
+            unreachable!()
+        }
+        fn operation_id(&self) -> OperationId {
+            "018f0000-0000-7000-8000-000000000001".parse().unwrap()
+        }
+    }
+
+    fn paths() -> (TempDir, std::path::PathBuf) {
+        let dir = TempDir::new();
+        let db = dir.path().join("db.sqlite");
+        (dir, db)
+    }
+
+    #[test]
+    fn missing_device_id_is_created_and_stable() {
+        let (_dir, db) = paths();
+        let ids = FixedIds;
+        let first = device(&db, &ids).unwrap();
+        assert_eq!(device(&db, &ids).unwrap(), first);
+    }
+
+    #[test]
+    fn valid_device_id_is_read() {
+        let (_dir, db) = paths();
+        let id: DeviceId = "018f0000-0000-7000-8000-000000000002".parse().unwrap();
+        let path = db.with_file_name("device-id");
+        std::fs::write(&path, format!("{id}\n")).unwrap();
+        assert_eq!(device(&db, &FixedIds).unwrap(), id);
+    }
+
+    #[test]
+    fn non_utf8_device_id_is_rejected_without_replacement() {
+        let (_dir, db) = paths();
+        let path = db.with_file_name("device-id");
+        let bytes = [0xff, 0xfe, 0xfd];
+        std::fs::write(&path, bytes).unwrap();
+        assert!(device(&db, &FixedIds).is_err());
+        assert_eq!(std::fs::read(path).unwrap(), bytes);
+    }
 }
