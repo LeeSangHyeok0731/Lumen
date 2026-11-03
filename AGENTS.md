@@ -30,6 +30,7 @@ never remove.**
 | Jev (AI) contract, safety, evaluation | [`docs/ai/`](docs/ai/architecture.md) |
 | UI and UX principles (desktop, mobile, website) | [`docs/design/ui-principles.md`](docs/design/ui-principles.md) |
 | UX writing: tone, Korean 해요체 rules, Lumen's words | [`docs/design/ux-writing.md`](docs/design/ux-writing.md) |
+| Rules for one directory (read before editing there) | its `AGENTS.md`: [`lumen-fs-exec`](crates/lumen-fs-exec/AGENTS.md), [`lumen-policy`](crates/lumen-policy/AGENTS.md), [`lumen-jev`](crates/lumen-jev/AGENTS.md), [`apps/desktop`](apps/desktop/AGENTS.md), [`apps/web`](apps/web/AGENTS.md), [`.github`](.github/AGENTS.md) |
 
 Do not load the whole repository into context. Search, read the relevant ADR and the
 files you will touch, trace dependencies, inspect tests, then change.
