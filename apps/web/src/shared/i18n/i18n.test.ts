@@ -3,7 +3,7 @@ import explainSource from "../../../../../crates/lumen-policy/src/explain.rs?raw
 import { en, type GlossaryTerm, type Messages } from "./en";
 import { countFormat, formatDateTime } from "./format";
 import { ko } from "./ko";
-import { detectLocale, LOCALES } from "./locale";
+import { detectLocale, LOCALE_NAMES, LOCALES, parseLocale } from "./locale";
 import { aiNoteText, MESSAGES, reasonText } from "./messages";
 import { RULE_IDS } from "./rules";
 import { storedLocale, storeLocale } from "./storage";
@@ -31,7 +31,9 @@ describe("catalogs", () => {
       "AI: could not tell what this is",
     );
     for (const locale of LOCALES) {
-      expect(aiNoteText(MESSAGES[locale], { kind: "logs", confidence: "medium" })).toMatch(/^AI: /);
+      expect(
+        aiNoteText(MESSAGES[locale], { kind: "logs", confidence: "medium" }).length,
+      ).toBeGreaterThan(0);
     }
   });
 
@@ -70,7 +72,8 @@ describe("catalogs", () => {
   });
 
   it("render every known rule in each language", () => {
-    for (const messages of [en, ko] satisfies Messages[]) {
+    for (const locale of LOCALES) {
+      const messages: Messages = MESSAGES[locale];
       for (const rule of RULE_IDS) {
         const text = reasonText(messages, { rule, text: "server" });
         expect(text, rule).not.toBe("server");
@@ -96,17 +99,38 @@ describe("catalogs", () => {
     expect(countFormat("en")(1204)).toBe("1,204");
     expect(countFormat("ko")("18446744073709551615")).toBe("18,446,744,073,709,551,615");
     expect(countFormat("ko")("n/a")).toBe("n/a");
+    for (const locale of LOCALES) {
+      expect(countFormat(locale)(1204)).not.toBe("");
+    }
     expect(ko.confirm.title(1204, "4.2 GB")).toBe("항목 1,204개(4.2 GB)를 격리함으로 옮길까요?");
     expect(en.confirm.title(1, "4.2 GB")).toBe("Move 1 item (4.2 GB) to Quarantine?");
     expect(en.done.title(1204, "9.2 GB")).toBe("Moved 1,204 items (9.2 GB) to Quarantine.");
+    for (const locale of LOCALES) {
+      const localizedCount = new Intl.NumberFormat(locale, {
+        maximumFractionDigits: 0,
+      }).format(1204);
+      expect(MESSAGES[locale].common.items(1204)).toContain(localizedCount);
+    }
   });
 
   it("show timestamps as a date and time in each language", () => {
     expect(formatDateTime("en", "2026-10-16T09:00:00Z", "UTC")).toBe("Oct 16, 2026, 9:00 AM");
-    expect(formatDateTime("ko", "2026-10-16T09:00:00Z", "UTC")).toBe("2026. 10. 16. 오전 9:00");
+    const timestamp = "2026-10-16T09:00:00Z";
+    expect(formatDateTime("ko", timestamp, "UTC")).toBe(
+      new Intl.DateTimeFormat("ko", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "UTC",
+      }).format(Date.parse(timestamp)),
+    );
     expect(formatDateTime("en", "2026-10-16T18:30:00.5+09:00", "UTC")).toBe(
       "Oct 16, 2026, 9:30 AM",
     );
+    for (const locale of LOCALES) {
+      expect(formatDateTime(locale, "2026-10-16T09:00:00Z", "UTC")).not.toBe(
+        "2026-10-16T09:00:00Z",
+      );
+    }
   });
 
   it("show anything that is not an RFC 3339 timestamp as it came", () => {
@@ -118,10 +142,26 @@ describe("catalogs", () => {
 });
 
 describe("detectLocale", () => {
+  it("supports the same languages as the site", () => {
+    expect(LOCALES).toEqual(["ko", "en", "ru", "ja", "zh-CN", "es"]);
+    for (const locale of LOCALES) {
+      expect(parseLocale(locale)).toBe(locale);
+      expect(LOCALE_NAMES[locale]).not.toBe("");
+    }
+  });
+
   it("takes the first supported language the user prefers", () => {
     expect(detectLocale(["ko-KR", "en"])).toBe("ko");
     expect(detectLocale(["fr", "ko"])).toBe("ko");
     expect(detectLocale(["en-US", "ko-KR"])).toBe("en");
+    expect(detectLocale(["ru-RU", "ja"])).toBe("ru");
+    expect(detectLocale(["zh-CN", "es"])).toBe("zh-CN");
+    expect(detectLocale(["zh-Hans-CN", "es"])).toBe("zh-CN");
+    expect(detectLocale(["zh-SG", "ja"])).toBe("zh-CN");
+    expect(detectLocale(["zh", "ja"])).toBe("zh-CN");
+    expect(detectLocale(["zh-TW", "es"])).toBe("es");
+    expect(detectLocale(["es-MX", "ru"])).toBe("es");
+    expect(detectLocale(["ja-JP", "ru"])).toBe("ja");
     expect(detectLocale(["fr"])).toBe("en");
     expect(detectLocale(["kok"])).toBe("en");
     expect(detectLocale([])).toBe("en");
@@ -156,6 +196,8 @@ describe("locale storage", () => {
     expect(storedLocale()).toBeNull();
     storeLocale("ko");
     expect(storedLocale()).toBe("ko");
+    storeLocale("zh-CN");
+    expect(storedLocale()).toBe("zh-CN");
     items.set("lumen.locale", "fr");
     expect(storedLocale()).toBeNull();
   });

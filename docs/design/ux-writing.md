@@ -68,9 +68,18 @@ to a tool that decides about people's files. It complements
 - Positive phrasing as in Korean ("You can restore items until you remove them for
   good").
 
+## Other app languages
+
+The app is available in Russian, Japanese, Simplified Chinese and Spanish as well as
+Korean and English. Keep each translation natural in its own language while preserving
+the safety meaning: when Lumen is unsure, it leaves an item alone; Quarantine is
+reversible, while removing an item for good is not. Keep product names, commands,
+paths and technical identifiers unchanged.
+
 ## Lumen's words
 
-Use these and only these, in both languages.
+Use these and only these in Korean and English. In other app languages, use the
+matching translated terms consistently.
 
 | Korean | English | Meaning |
 | --- | --- | --- |

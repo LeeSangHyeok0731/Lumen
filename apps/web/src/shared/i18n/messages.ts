@@ -1,11 +1,22 @@
 import type { AiNoteView, ReasonView } from "@lumen/api-client";
 import { en, type Messages } from "./en";
+import { es } from "./es";
+import { ja } from "./ja";
 import { ko } from "./ko";
 import type { Locale } from "./locale";
+import { ru } from "./ru";
 import { LOCATION_RULE_PREFIX, RULE_IDS } from "./rules";
+import { zhCN } from "./zh-CN";
 
 /** Every locale's catalog. */
-export const MESSAGES: { readonly [L in Locale]: Messages } = { en, ko };
+export const MESSAGES: { readonly [L in Locale]: Messages } = {
+  en,
+  ko,
+  ru,
+  ja,
+  "zh-CN": zhCN,
+  es,
+};
 
 /**
  * One policy reason in the catalog's language, chosen by its stable rule ID.

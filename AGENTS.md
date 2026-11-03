@@ -30,6 +30,7 @@ never remove.**
 | Jev (AI) contract, safety, evaluation | [`docs/ai/`](docs/ai/architecture.md) |
 | UI and UX principles (desktop, mobile, website) | [`docs/design/ui-principles.md`](docs/design/ui-principles.md) |
 | UX writing: tone, Korean 해요체 rules, Lumen's words | [`docs/design/ux-writing.md`](docs/design/ux-writing.md) |
+| Rules for one directory (read before editing there) | its `AGENTS.md`: [`lumen-fs-exec`](crates/lumen-fs-exec/AGENTS.md), [`lumen-policy`](crates/lumen-policy/AGENTS.md), [`lumen-jev`](crates/lumen-jev/AGENTS.md), [`apps/desktop`](apps/desktop/AGENTS.md), [`apps/web`](apps/web/AGENTS.md), [`.github`](.github/AGENTS.md) |
 
 Do not load the whole repository into context. Search, read the relevant ADR and the
 files you will touch, trace dependencies, inspect tests, then change.
@@ -44,8 +45,9 @@ files you will touch, trace dependencies, inspect tests, then change.
 3. **Plan the smallest change** that is one logical unit. If it would exceed about
    400 changed lines of non-generated code, or mixes concerns: **stop and split**.
 4. **Implement** on a branch named `<type>/<short-slug>` from an up-to-date `develop`.
-5. **Verify:** `just check` (format, clippy, tests, cargo-deny, schema drift, and
-   the JavaScript workspace's Biome and typecheck). Run relevant integration tests.
+5. **Verify:** `just check` (format, clippy, tests, cargo-deny, schema drift, crate
+   layering and doc links (`cargo xtask lint`), and the JavaScript workspace's Biome
+   and typecheck). Run relevant integration tests.
    Fix root causes; never weaken a check.
 6. **Commit** one Conventional Commit (`type(scope): summary`).
 7. **PR:** `gh pr create` with the template sections (Summary, Why, Changes, Tests,
