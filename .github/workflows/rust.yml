@@ -191,3 +191,5 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/develop' }}
       - name: Committed JSON Schemas match the Rust types (ADR-0011)
         run: cargo xtask schema --check
+      - name: Crate layering, pure-crate IO, ADR index and documentation links (ADR-0056)
+        run: cargo xtask lint
