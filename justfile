@@ -47,6 +47,10 @@ gen:
 schema-check:
     cargo xtask schema --check
 
+# Test the Claude Code guard hooks (ADR-0056); needs jq. CI runs it on Linux.
+agent-hooks-test:
+    .claude/hooks/test-guards.sh
+
 # Install the JavaScript workspace exactly as locked (ADR-0024).
 js-install:
     pnpm install --frozen-lockfile
