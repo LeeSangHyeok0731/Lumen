@@ -16,7 +16,7 @@ import {
 } from "@/shared/ui";
 import { AiReviewSetting } from "./AiReviewSetting";
 
-/** English / 한국어, each named in its own language. */
+/** Each language is named in its own words. */
 function LanguageSetting() {
   const { locale, m, setLocale } = useI18n();
   return (
