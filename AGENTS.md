@@ -44,8 +44,9 @@ files you will touch, trace dependencies, inspect tests, then change.
 3. **Plan the smallest change** that is one logical unit. If it would exceed about
    400 changed lines of non-generated code, or mixes concerns: **stop and split**.
 4. **Implement** on a branch named `<type>/<short-slug>` from an up-to-date `develop`.
-5. **Verify:** `just check` (format, clippy, tests, cargo-deny, schema drift, and
-   the JavaScript workspace's Biome and typecheck). Run relevant integration tests.
+5. **Verify:** `just check` (format, clippy, tests, cargo-deny, schema drift, crate
+   layering and doc links (`cargo xtask lint`), and the JavaScript workspace's Biome
+   and typecheck). Run relevant integration tests.
    Fix root causes; never weaken a check.
 6. **Commit** one Conventional Commit (`type(scope): summary`).
 7. **PR:** `gh pr create` with the template sections (Summary, Why, Changes, Tests,

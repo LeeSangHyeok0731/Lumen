@@ -7,6 +7,8 @@
 //!   (ADR-0011).
 //! - `schema --check`: regenerate in memory and fail if the committed files differ,
 //!   so a contract change cannot merge without a reviewed schema diff.
+//! - `lint`: check crate layering, pure-crate IO, the ADR index and documentation
+//!   links; every problem says how to fix it (ADR-0056).
 //! - `devkb --max-age-days <N>`: fail if a knowledge-base entry was last verified
 //!   more than `N` days ago, or on a future date (ADR-0021). Run on a schedule, not
 //!   on pull requests, so time passing never fails unrelated changes.
@@ -29,6 +31,7 @@ use lumen_devkb::{DateIssue, KnowledgeBase};
 
 mod android;
 mod ios;
+mod lint;
 use lumen_domain as d;
 use schemars::{JsonSchema, schema_for};
 
@@ -174,12 +177,13 @@ fn main() -> ExitCode {
     {
         ["schema"] => schema(false),
         ["schema", "--check"] => schema(true),
+        ["lint"] => lint::lint(),
         ["devkb", "--max-age-days", days] => devkb(days),
         ["android"] => android::android(),
         ["ios"] => ios::ios(),
         _ => {
             eprintln!(
-                "usage: cargo xtask schema [--check] | devkb --max-age-days <N> | android | ios"
+                "usage: cargo xtask schema [--check] | lint | devkb --max-age-days <N> | android | ios"
             );
             return ExitCode::from(2);
         }
