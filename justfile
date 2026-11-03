@@ -50,6 +50,10 @@ schema-check:
 # Test the Claude Code guard hooks (ADR-0056); needs jq. CI runs it on Linux.
 agent-hooks-test:
     .claude/hooks/test-guards.sh
+# Each problem it reports says how to fix it.
+# Check crate layering, pure-crate IO, the ADR index and doc links (ADR-0056).
+repo-lint:
+    cargo xtask lint
 
 # Install the JavaScript workspace exactly as locked (ADR-0024).
 js-install:
@@ -71,4 +75,4 @@ fm-judge-test:
     swift test --package-path apps/fm-judge
 
 # Everything CI checks; run before every commit.
-check: fmt-check lint test deny schema-check js-check
+check: fmt-check lint test deny schema-check repo-lint js-check

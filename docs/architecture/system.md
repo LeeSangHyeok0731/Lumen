@@ -87,7 +87,7 @@ Crates are created only when their first code lands.
       lumen-app  ·  lumen-api  ·  lumen-ffi  ·  apps/desktop (Tauri host)  ·  lumen-cli
 ```
 
-Dependency rules (enforced by Cargo, and checked in CI):
+Dependency rules (checked by `cargo xtask lint`, part of `just check` and CI):
 
 - `lumen-domain`, `lumen-policy` and `lumen-graph` have no IO, no async runtime, no
   platform code and no `#[cfg(target_os)]`.
