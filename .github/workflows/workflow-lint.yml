@@ -35,6 +35,10 @@ jobs:
           tar -xzf actionlint.tar.gz actionlint
       # shellcheck is preinstalled on ubuntu runners and checks run: scripts.
       - run: ./actionlint -color
+      - name: Claude Code guard hooks block what they should, and only that (ADR-0056)
+        run: |
+          shellcheck .claude/hooks/*.sh
+          .claude/hooks/test-guards.sh
 
   zizmor:
     name: zizmor

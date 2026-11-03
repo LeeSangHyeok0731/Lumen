@@ -28,6 +28,9 @@
 /renovate.json                      @zaewc
 /lefthook.yml                       @zaewc
 
+# Coding-agent guard rails (ADR-0056)
+/.claude/                           @zaewc
+
 # Decisions and security documentation
 /docs/decisions/                    @zaewc
 /docs/security/                     @zaewc
