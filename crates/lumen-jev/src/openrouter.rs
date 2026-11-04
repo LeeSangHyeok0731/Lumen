@@ -117,16 +117,13 @@ pub struct JevJudge {
 }
 
 fn descriptor(provider: Provider, prompt: &str) -> Result<JudgeDescriptor, SetupError> {
-    let (name, revision) = prompt.split_once('/').ok_or(SetupError::Descriptor)?;
     Ok(JudgeDescriptor {
         provider: SourceName::new(provider.source()).map_err(|_| SetupError::Descriptor)?,
         model: ModelId::new(provider.model()).map_err(|_| SetupError::Descriptor)?,
         model_version: None,
-        prompt_version: PromptVersion::new(
-            name,
-            revision.parse().map_err(|_| SetupError::Descriptor)?,
-        )
-        .map_err(|_| SetupError::Descriptor)?,
+        prompt_version: prompt
+            .parse::<PromptVersion>()
+            .map_err(|_| SetupError::Descriptor)?,
     })
 }
 
