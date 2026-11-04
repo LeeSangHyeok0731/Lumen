@@ -1,15 +1,16 @@
 //! `lumen`: the developer command line.
 //!
 //! ```text
-//! lumen scan <PATH>... [--db <FILE>] [--json]
-//! lumen assess --db <FILE> [--json]
-//! lumen plan --db <FILE> [--choose <PATH>]...
+//! lumen scan [<PATH>...] [--db <FILE>] [--json]
+//! lumen assess --db <FILE> [--json] [--jev | --no-ai]
+//! lumen plan --db <FILE> [--choose <PATH>]... [--jev | --no-ai]
 //! lumen quarantine --db <FILE> --plan <ID> --confirm <HASH>
 //! lumen list --db <FILE>
 //! lumen restore --db <FILE> --op <ID>
 //! lumen finalize --db <FILE> --op <ID>
 //! lumen finalize --db <FILE> --expired
-//! lumen jev key set|clear|status
+//! lumen jev key set|clear|status [--openrouter]
+//! lumen ai on|off|status --db <FILE>
 //! ```
 //!
 //! `assess` decides the latest completed scan in the database and reports each
@@ -24,8 +25,10 @@
 //! store holds, `restore` puts one item back, and `finalize` removes one item
 //! for good (roadmap 10.15b), or, with `--expired`, every retained item past
 //! its 30-day retention (roadmap 10.20). `jev key` stores, removes or checks the
-//! `OpenRouter` API key in the system's secret store, reading it from standard
-//! input (roadmap 10.17).
+//! Jeb API key (or, with `--openrouter`, the `OpenRouter` one) in the system's
+//! secret store, reading it from standard input (roadmap 10.17). `ai` saves
+//! whether every `assess` and `plan` asks for AI review; `--jev` or `--no-ai`
+//! overrides that choice for one run.
 //!
 //! Scans are **read-only**: Lumen never modifies the scanned files. With `--db`,
 //! results and a snapshot are written to that `index.db` file (and nothing else).
@@ -348,13 +351,7 @@ fn main() -> ExitCode {
             println!("{USAGE}");
             ExitCode::SUCCESS
         }
-        Ok(Command::Scan(scan)) => match run(&scan) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(e) => {
-                eprintln!("error: {e}");
-                ExitCode::FAILURE
-            }
-        },
+        Ok(Command::Scan(scan)) => report(run(&scan)),
         Ok(Command::List(db)) => report(run_held(HeldAction::List, &db, None)),
         Ok(Command::JevKey(action, service)) => report(run_jev_key(action, service)),
         Ok(Command::Ai(action, db)) => report(run_ai(action, &db)),
@@ -367,27 +364,9 @@ fn main() -> ExitCode {
         Ok(Command::Finalize(args)) => {
             report(run_held(HeldAction::Finalize, &args.db, Some(&args.op)))
         }
-        Ok(Command::Quarantine(args)) => match run_quarantine(&args) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(e) => {
-                eprintln!("error: {e}");
-                ExitCode::FAILURE
-            }
-        },
-        Ok(Command::Plan(args)) => match run_plan(&args) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(e) => {
-                eprintln!("error: {e}");
-                ExitCode::FAILURE
-            }
-        },
-        Ok(Command::Assess(assess)) => match run_assess(&assess) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(e) => {
-                eprintln!("error: {e}");
-                ExitCode::FAILURE
-            }
-        },
+        Ok(Command::Quarantine(args)) => report(run_quarantine(&args)),
+        Ok(Command::Plan(args)) => report(run_plan(&args)),
+        Ok(Command::Assess(assess)) => report(run_assess(&assess)),
         Err(message) => {
             eprintln!("error: {message}\n{USAGE}");
             ExitCode::from(2)
