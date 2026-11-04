@@ -62,6 +62,81 @@ fn scans_a_tree_and_records_a_snapshot() -> Result<(), Box<dyn std::error::Error
     Ok(())
 }
 
+/// The verdict and reclaim of the one candidate an assessment of `root` finds.
+fn assess_one(
+    dir: &std::path::Path,
+    root: &std::path::Path,
+) -> Result<(String, u64), Box<dyn std::error::Error>> {
+    let db = dir.join("index.db");
+    let scan = lumen(&[
+        "scan".as_ref(),
+        root.as_os_str(),
+        "--db".as_ref(),
+        db.as_os_str(),
+    ])?;
+    assert!(
+        scan.status.success(),
+        "{}",
+        String::from_utf8_lossy(&scan.stderr)
+    );
+    let out = lumen(&[
+        "assess".as_ref(),
+        "--db".as_ref(),
+        db.as_os_str(),
+        "--json".as_ref(),
+    ])?;
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout)?;
+    let candidates = report["candidates"].as_array().ok_or("no candidates")?;
+    assert_eq!(candidates.len(), 1, "{report}");
+    let verdict = candidates[0]["verdict"].as_str().ok_or("no verdict")?;
+    let bytes = candidates[0]["reclaimable_bytes"]
+        .as_u64()
+        .ok_or("no bytes")?;
+    Ok((verdict.to_owned(), bytes))
+}
+
+fn project(root: &std::path::Path) -> Result<std::path::PathBuf, std::io::Error> {
+    let package = root.join("node_modules").join("x");
+    std::fs::create_dir_all(&package)?;
+    std::fs::write(root.join("package.json"), "{}")?;
+    std::fs::write(root.join("package-lock.json"), "{}")?;
+    let payload = package.join("payload.bin");
+    std::fs::write(&payload, vec![7; 2_000_000])?;
+    Ok(payload)
+}
+
+/// Directory records carry no link count, so a listing alone frees nothing
+/// for certain; assessment re-reads the files below a candidate by handle
+/// (ADR-0017, 2026-11-04 amendment).
+#[test]
+fn candidates_are_measured_by_handle() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = tempfile::tempdir()?;
+    let root = dir.path().join("app");
+    project(&root)?;
+    let (verdict, bytes) = assess_one(dir.path(), &root)?;
+    assert_eq!(verdict, "QUARANTINE");
+    assert!(bytes >= 2_000_000, "{bytes}");
+    Ok(())
+}
+
+/// A file with another link outside the candidate frees nothing when the
+/// candidate is removed (a pnpm store links into `node_modules`).
+#[test]
+fn a_file_linked_from_outside_frees_nothing() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = tempfile::tempdir()?;
+    let root = dir.path().join("app");
+    let payload = project(&root)?;
+    std::fs::hard_link(&payload, root.join("store.bin"))?;
+    let (verdict, bytes) = assess_one(dir.path(), &root)?;
+    assert_eq!((verdict.as_str(), bytes), ("KEEP", 0));
+    Ok(())
+}
+
 #[test]
 fn a_missing_path_is_an_incomplete_scan_not_an_empty_one() -> Result<(), Box<dyn std::error::Error>>
 {
