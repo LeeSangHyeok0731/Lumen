@@ -140,7 +140,16 @@ struct Shared<'a> {
     cancel: &'a CancelToken,
 }
 
-impl Shared<'_> {
+impl<'a> Shared<'a> {
+    /// An empty queue whose workers observe `cancel`.
+    fn new(cancel: &'a CancelToken) -> Self {
+        Self {
+            queue: Mutex::new(Queue::default()),
+            changed: Condvar::new(),
+            cancel,
+        }
+    }
+
     fn lock(&self) -> MutexGuard<'_, Queue> {
         // A worker that panicked cannot leave the queue logically inconsistent
         // (every mutation is a single push/pop/counter update), so recover.
@@ -199,7 +208,17 @@ struct Delivery<'c, C> {
     every: usize,
 }
 
-impl<C: FnMut(ScanItem) -> ControlFlow<()>> Delivery<'_, C> {
+impl<'c, C: FnMut(ScanItem) -> ControlFlow<()>> Delivery<'c, C> {
+    /// Zero totals, with progress emitted every `config.progress_every` results.
+    fn new(consume: &'c mut C, config: &ScanConfig) -> Self {
+        Self {
+            consume,
+            totals: ScanProgress::default(),
+            since_progress: 0,
+            every: config.progress_every.get(),
+        }
+    }
+
     fn deliver(&mut self, item: ScanItem) -> ControlFlow<()> {
         match &item {
             ScanItem::Entry(entry) => {
@@ -234,17 +253,8 @@ pub fn scan<E: DirEnumerator, C: FnMut(ScanItem) -> ControlFlow<()>>(
     cancel: &CancelToken,
     mut consume: C,
 ) -> ScanSummary {
-    let shared = Shared {
-        queue: Mutex::new(Queue::default()),
-        changed: Condvar::new(),
-        cancel,
-    };
-    let mut delivery = Delivery {
-        consume: &mut consume,
-        totals: ScanProgress::default(),
-        since_progress: 0,
-        every: config.progress_every.get(),
-    };
+    let shared = Shared::new(cancel);
+    let mut delivery = Delivery::new(&mut consume, config);
     let mut stop = None;
 
     // Roots are examined on the calling thread so their entries arrive first.
@@ -307,11 +317,7 @@ pub fn resume<E: DirEnumerator, C: FnMut(ScanItem) -> ControlFlow<()>>(
     cancel: &CancelToken,
     mut consume: C,
 ) -> ScanSummary {
-    let shared = Shared {
-        queue: Mutex::new(Queue::default()),
-        changed: Condvar::new(),
-        cancel,
-    };
+    let shared = Shared::new(cancel);
     {
         let mut queue = shared.lock();
         for dir in frontier {
@@ -320,12 +326,7 @@ pub fn resume<E: DirEnumerator, C: FnMut(ScanItem) -> ControlFlow<()>>(
             }
         }
     }
-    let mut delivery = Delivery {
-        consume: &mut consume,
-        totals: ScanProgress::default(),
-        since_progress: 0,
-        every: config.progress_every.get(),
-    };
+    let mut delivery = Delivery::new(&mut consume, config);
     let stop = if cancel.is_cancelled() {
         Some(StopReason::Cancelled)
     } else {
