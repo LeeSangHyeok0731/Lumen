@@ -667,23 +667,10 @@ fn prepare_with_progress(
     })
 }
 
-/// A developer tool's own cleanup command: a literal argument vector from the
-/// knowledge base, never a shell string. Shown with its item; run only when
-/// the user asks, through [`crate::tools`] (ADR-0049).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ToolGuidance {
-    /// The knowledge-base entry it comes from, which names it to run it.
-    pub entry: String,
-    /// The tool's display name, e.g. `Xcode`.
-    pub tool: String,
-    /// The program, e.g. `xcrun`.
-    pub program: String,
-    /// Its arguments, e.g. `["simctl", "delete", "unavailable"]`.
-    pub args: Vec<String>,
-    /// The item cannot be regenerated, so the command removes data, not
-    /// just caches (Docker's disk image).
-    pub removes_data: bool,
-}
+/// A developer tool's own cleanup command shown with its item: the same
+/// [`ToolCommand`](crate::tools::ToolCommand) that [`crate::tools`] runs
+/// when the user asks (ADR-0049).
+pub use crate::tools::ToolCommand as ToolGuidance;
 
 /// The cleanup command of the tool whose knowledge-base entry `assessed`
 /// matched, if that entry has one and it acts on `assessed` here: the first
@@ -718,15 +705,7 @@ fn tool_guidance(
             _ => None,
         })
         .filter(|entry| entry.official_action.is_some() && acts(entry))
-        .find_map(|entry| {
-            entry.official_action.as_ref().map(|action| ToolGuidance {
-                entry: entry.id.clone(),
-                tool: entry.tool.clone(),
-                program: action.program.clone(),
-                args: action.args.clone(),
-                removes_data: entry.safety_class == lumen_devkb::SafetyClass::NotRegenerable,
-            })
-        })
+        .find_map(|entry| crate::tools::command(kb, &entry.id))
 }
 
 /// How an item is grouped when results are presented.
