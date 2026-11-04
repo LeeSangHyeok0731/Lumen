@@ -63,25 +63,40 @@ fn case_insensitive(platform: Platform) -> bool {
     )
 }
 
-/// The non-empty components of a path, folded for `platform`.
-fn components(path: &RawPath, platform: Platform) -> Vec<Component> {
+/// The non-empty components of a path, unfolded.
+fn raw_components(path: &RawPath) -> impl DoubleEndedIterator<Item = &[u8]> {
     let separators: &[u8] = match path.flavor() {
         PathFlavor::Unix => b"/",
         PathFlavor::Windows => b"\\/",
     };
-    let fold = case_insensitive(platform);
     path.as_bytes()
-        .split(|b| separators.contains(b))
+        .split(move |b| separators.contains(b))
         .filter(|part| !part.is_empty())
-        .map(|part| {
-            let text = String::from_utf8_lossy(part);
-            if fold {
-                text.to_lowercase()
-            } else {
-                text.into_owned()
-            }
-        })
+}
+
+/// One path component, folded for comparison when `fold` is set.
+fn component(part: &[u8], fold: bool) -> Component {
+    let text = String::from_utf8_lossy(part);
+    if fold {
+        text.to_lowercase()
+    } else {
+        text.into_owned()
+    }
+}
+
+/// The non-empty components of a path, folded for `platform`.
+fn components(path: &RawPath, platform: Platform) -> Vec<Component> {
+    let fold = case_insensitive(platform);
+    raw_components(path)
+        .map(|part| component(part, fold))
         .collect()
+}
+
+/// The last of [`components`], without folding the rest.
+fn last_component(path: &RawPath, platform: Platform) -> Option<Component> {
+    raw_components(path)
+        .next_back()
+        .map(|part| component(part, case_insensitive(platform)))
 }
 
 /// A location's pattern relative to its root, folded for `platform`; `*` stays
@@ -273,10 +288,9 @@ impl KnowledgeBase {
         observed_at: Timestamp,
     ) -> Vec<Evidence> {
         let matcher = self.matcher(env);
-        let paths = matcher.paths(scanned);
         let mut markers = Markers::new();
-        matcher.collect_markers(scanned, &paths, &mut markers);
-        matcher.evidence(scanned, &paths, &markers, observed_at)
+        matcher.add_markers(scanned, &mut markers);
+        matcher.evidence(scanned, &matcher.paths(scanned), &markers, observed_at)
     }
 
     /// Whether entry `id`'s own command acts on `path`, an object that matched
@@ -313,7 +327,18 @@ impl KnowledgeBase {
 impl Matcher<'_> {
     /// Pass 1: adds the marker paths among `chunk` to `markers`.
     pub fn add_markers(&self, chunk: &[FilesystemEntry], markers: &mut Markers) {
-        self.collect_markers(chunk, &self.paths(chunk), markers);
+        // Only a file whose last name is a marker's is kept, so only those
+        // paths are split and folded: this runs over every entry of a scan.
+        markers.paths.extend(
+            chunk
+                .iter()
+                .filter(|entry| {
+                    entry.kind == EntryKind::File
+                        && last_component(&entry.path, self.platform)
+                            .is_some_and(|name| self.marker_names.contains(&name))
+                })
+                .map(|entry| components(&entry.path, self.platform)),
+        );
     }
 
     /// Pass 2: `KnowledgeBaseMatch` evidence for every file or directory in
@@ -336,26 +361,6 @@ impl Matcher<'_> {
             .iter()
             .map(|e| components(&e.path, self.platform))
             .collect()
-    }
-
-    fn collect_markers(
-        &self,
-        scanned: &[FilesystemEntry],
-        paths: &[Vec<Component>],
-        markers: &mut Markers,
-    ) {
-        markers.paths.extend(
-            scanned
-                .iter()
-                .zip(paths)
-                .filter(|(entry, path)| {
-                    entry.kind == EntryKind::File
-                        && path
-                            .last()
-                            .is_some_and(|name| self.marker_names.contains(name))
-                })
-                .map(|(_, path)| path.clone()),
-        );
     }
 
     fn evidence(
