@@ -62,11 +62,17 @@ fn scans_a_tree_and_records_a_snapshot() -> Result<(), Box<dyn std::error::Error
     Ok(())
 }
 
-/// The verdict and reclaim of the one candidate an assessment of `root` finds.
+/// What `eligible.frees-nothing` says when it fires.
+const FREES_NOTHING: &str = "Kept: removing it would free no space.";
+
+/// The reclaim and reasons of the one candidate an assessment of `root`
+/// finds. Verdicts are not compared: under CI's elevated token new files
+/// belong to Administrators, so the in-use gate keeps what the person's own
+/// session would propose (ADR-0030).
 fn assess_one(
     dir: &std::path::Path,
     root: &std::path::Path,
-) -> Result<(String, u64), Box<dyn std::error::Error>> {
+) -> Result<(u64, Vec<String>), Box<dyn std::error::Error>> {
     let db = dir.join("index.db");
     let scan = lumen(&[
         "scan".as_ref(),
@@ -93,11 +99,16 @@ fn assess_one(
     let report: serde_json::Value = serde_json::from_slice(&out.stdout)?;
     let candidates = report["candidates"].as_array().ok_or("no candidates")?;
     assert_eq!(candidates.len(), 1, "{report}");
-    let verdict = candidates[0]["verdict"].as_str().ok_or("no verdict")?;
     let bytes = candidates[0]["reclaimable_bytes"]
         .as_u64()
         .ok_or("no bytes")?;
-    Ok((verdict.to_owned(), bytes))
+    let reasons = candidates[0]["reasons"]
+        .as_array()
+        .ok_or("no reasons")?
+        .iter()
+        .filter_map(|reason| reason.as_str().map(str::to_owned))
+        .collect();
+    Ok((bytes, reasons))
 }
 
 fn project(root: &std::path::Path) -> Result<std::path::PathBuf, std::io::Error> {
@@ -118,9 +129,9 @@ fn candidates_are_measured_by_handle() -> Result<(), Box<dyn std::error::Error>>
     let dir = tempfile::tempdir()?;
     let root = dir.path().join("app");
     project(&root)?;
-    let (verdict, bytes) = assess_one(dir.path(), &root)?;
-    assert_eq!(verdict, "QUARANTINE");
+    let (bytes, reasons) = assess_one(dir.path(), &root)?;
     assert!(bytes >= 2_000_000, "{bytes}");
+    assert!(!reasons.iter().any(|r| r == FREES_NOTHING), "{reasons:?}");
     Ok(())
 }
 
@@ -132,8 +143,9 @@ fn a_file_linked_from_outside_frees_nothing() -> Result<(), Box<dyn std::error::
     let root = dir.path().join("app");
     let payload = project(&root)?;
     std::fs::hard_link(&payload, root.join("store.bin"))?;
-    let (verdict, bytes) = assess_one(dir.path(), &root)?;
-    assert_eq!((verdict.as_str(), bytes), ("KEEP", 0));
+    let (bytes, reasons) = assess_one(dir.path(), &root)?;
+    assert_eq!(bytes, 0);
+    assert!(reasons.iter().any(|r| r == FREES_NOTHING), "{reasons:?}");
     Ok(())
 }
 
