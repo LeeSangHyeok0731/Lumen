@@ -117,7 +117,7 @@ Dependency rules (checked by `cargo xtask lint`, part of `just check` and CI):
 Ports for filesystem and OS inspection are **synchronous**. They run on plain `std`
 threads: the scanner's scoped worker threads (`crates/lumen-scan/src/scheduler.rs`) or
 the calling thread. Only model-bound ports (`JudgeModel`, `Describer`) are async; there
-is no async runtime, and `lumen_app::block_on` (`crates/lumen-app/src/assess.rs`) runs
+is no async runtime, and `lumen_app::block_on` (`crates/lumen-app/src/runtime.rs`) runs
 their futures on the calling thread
 ([ADR-0017 amendment](../decisions/0017-scan-engine-and-size-accounting.md#amendment-the-scheduler-uses-scoped-threads-and-lumens-own-token-2026-11-02)).
 
