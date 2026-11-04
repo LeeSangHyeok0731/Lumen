@@ -12,6 +12,22 @@ use lumen_domain::{
 
 use crate::{Finding, PolicyInput, Rule};
 
+/// Identifiers of the rules that other crates look for in a decision's fired
+/// rules. The `RULES` table uses the same constants, so renaming a rule here
+/// renames it at every safety check that depends on it.
+pub mod ids {
+    /// Keeps an item a running process uses.
+    pub const PROTECT_IN_USE: &str = "protect.in-use";
+    /// Accepts a partial in-use answer (ADR-0030).
+    pub const ELIGIBLE_IN_USE_PARTIAL: &str = "eligible.in-use-partial";
+    /// Accepts a partial in-use answer on a single-user computer (ADR-0046).
+    pub const ELIGIBLE_IN_USE_PARTIAL_SINGLE_USER: &str = "eligible.in-use-partial-single-user";
+    /// Leaves an item for its tool's own cleanup command (ADR-0051).
+    pub const CLASSIFY_DEVKB_TOOL_ACTION: &str = "classify.devkb-tool-action";
+    /// Leaves an item for review because it cannot be regenerated (ADR-0051).
+    pub const CLASSIFY_DEVKB_NOT_REGENERABLE: &str = "classify.devkb-not-regenerable";
+}
+
 /// Every rule the policy evaluates.
 pub(crate) const RULES: &[Rule] = &[
     Rule {
@@ -40,7 +56,7 @@ pub(crate) const RULES: &[Rule] = &[
         check: cloud_backed,
     },
     Rule {
-        id: "protect.in-use",
+        id: ids::PROTECT_IN_USE,
         stage: PolicyStage::HardProtection,
         check: in_use,
     },
@@ -65,12 +81,12 @@ pub(crate) const RULES: &[Rule] = &[
         check: incomplete_scan,
     },
     Rule {
-        id: "eligible.in-use-partial",
+        id: ids::ELIGIBLE_IN_USE_PARTIAL,
         stage: PolicyStage::Eligibility,
         check: in_use_partial_allowed,
     },
     Rule {
-        id: "eligible.in-use-partial-single-user",
+        id: ids::ELIGIBLE_IN_USE_PARTIAL_SINGLE_USER,
         stage: PolicyStage::Eligibility,
         check: in_use_partial_single_user,
     },
@@ -95,12 +111,12 @@ pub(crate) const RULES: &[Rule] = &[
         check: crate::classify::devkb_regenerable,
     },
     Rule {
-        id: "classify.devkb-tool-action",
+        id: ids::CLASSIFY_DEVKB_TOOL_ACTION,
         stage: PolicyStage::Classification,
         check: crate::classify::devkb_tool_action,
     },
     Rule {
-        id: "classify.devkb-not-regenerable",
+        id: ids::CLASSIFY_DEVKB_NOT_REGENERABLE,
         stage: PolicyStage::Classification,
         check: crate::classify::devkb_not_regenerable,
     },

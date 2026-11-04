@@ -284,7 +284,7 @@ fn probe(
 }
 
 /// The rule that keeps an item a running process uses.
-const IN_USE_RULE: &str = "protect.in-use";
+const IN_USE_RULE: &str = lumen_policy::ids::PROTECT_IN_USE;
 
 /// An item kept only because running processes use it, which the policy
 /// would propose for quarantine once they are closed. Display only: the
