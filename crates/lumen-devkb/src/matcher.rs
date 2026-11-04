@@ -408,7 +408,7 @@ impl Matcher<'_> {
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroU32;
+    use std::{num::NonZeroU32, sync::LazyLock};
 
     use lumen_domain::{
         AccessState, ByteCount, EntryTimes, FileId, FileIdentity, Protection, SizeFacts, SizeFlags,
@@ -510,6 +510,25 @@ mod tests {
             .collect()
     }
 
+    /// The built-in knowledge base, loaded once per test process.
+    fn builtin() -> &'static KnowledgeBase {
+        static BUILTIN: LazyLock<KnowledgeBase> =
+            LazyLock::new(|| KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}")));
+        &BUILTIN
+    }
+
+    /// Entry id of every built-in match.
+    fn builtin_ids(env: &Environment, scanned: &[FilesystemEntry]) -> Vec<String> {
+        builtin()
+            .matches(env, scanned, Timestamp::UNIX_EPOCH)
+            .into_iter()
+            .filter_map(|e| match e.fact {
+                Fact::KnowledgeBaseMatch { entry } => Some(entry.as_str().to_owned()),
+                _ => None,
+            })
+            .collect()
+    }
+
     #[test]
     fn home_locations_match_only_themselves() {
         let found = matched(
@@ -599,7 +618,7 @@ mod tests {
     /// instance's cache, never the instance folder or anything deeper.
     #[test]
     fn an_inner_wildcard_matches_one_name() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
+        let builtin = builtin();
         let mut win = env(Platform::Windows);
         win.local_app_data = Some(windows(r"C:\Users\ana\AppData\Local"));
         let vs = r"C:\Users\ana\AppData\Local\Microsoft\VisualStudio";
@@ -629,21 +648,10 @@ mod tests {
     /// profiles never do.
     #[test]
     fn arc_caches_match_only_in_its_user_cache_directory() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
-        let ids = |env: &Environment, scanned: &[FilesystemEntry]| -> Vec<String> {
-            builtin
-                .matches(env, scanned, Timestamp::UNIX_EPOCH)
-                .into_iter()
-                .filter_map(|e| match e.fact {
-                    Fact::KnowledgeBaseMatch { entry } => Some(entry.as_str().to_owned()),
-                    _ => None,
-                })
-                .collect()
-        };
         let mac = env(Platform::Macos);
         let caches = "/Users/ana/Library/Caches/Arc";
         assert_eq!(
-            ids(
+            builtin_ids(
                 &mac,
                 &[
                     dir(&format!("{caches}/User Data/Default/Cache"), 1),
@@ -655,7 +663,7 @@ mod tests {
         );
         let support = "/Users/ana/Library/Application Support/Arc";
         assert_eq!(
-            ids(
+            builtin_ids(
                 &mac,
                 &[
                     dir(caches, 1),
@@ -674,7 +682,7 @@ mod tests {
             0
         );
         assert_eq!(
-            ids(
+            builtin_ids(
                 &env(Platform::Linux),
                 &[dir(&format!("{caches}/User Data/Default/Cache"), 1)]
             )
@@ -925,7 +933,7 @@ mod tests {
 
     #[test]
     fn app_caches_match_and_app_data_never_does() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
+        let builtin = builtin();
         let mac = env(Platform::Macos);
         for (tail, expected) in APP_FOLDERS {
             let scanned = [dir(&format!("/Users/ana/{tail}"), 1)];
@@ -946,17 +954,6 @@ mod tests {
     /// caches match there.
     #[test]
     fn app_caches_match_where_the_vendor_documents_the_folder() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
-        let ids = |env: &Environment, scanned: &[FilesystemEntry]| -> Vec<String> {
-            builtin
-                .matches(env, scanned, Timestamp::UNIX_EPOCH)
-                .into_iter()
-                .filter_map(|e| match e.fact {
-                    Fact::KnowledgeBaseMatch { entry } => Some(entry.as_str().to_owned()),
-                    _ => None,
-                })
-                .collect()
-        };
         let mut win = env(Platform::Windows);
         win.roaming_app_data = Some(windows(r"C:\Users\ana\AppData\Roaming"));
         let roaming = |tail: &str| {
@@ -967,7 +964,7 @@ mod tests {
             )
         };
         assert_eq!(
-            ids(
+            builtin_ids(
                 &win,
                 &[
                     roaming(r"Code\GPUCache"),
@@ -976,9 +973,12 @@ mod tests {
             ),
             ["vscode-chromium-caches", "vscode-extension-vsix-cache"]
         );
-        assert_eq!(ids(&win, &[roaming(r"Code\Local Storage")]).len(), 0);
         assert_eq!(
-            ids(
+            builtin_ids(&win, &[roaming(r"Code\Local Storage")]).len(),
+            0
+        );
+        assert_eq!(
+            builtin_ids(
                 &win,
                 &[
                     roaming(r"discord\Cache"),
@@ -999,7 +999,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            ids(
+            builtin_ids(
                 &win,
                 &[
                     roaming("discord"),
@@ -1022,11 +1022,11 @@ mod tests {
         );
         let linux = env(Platform::Linux);
         assert_eq!(
-            ids(&linux, &[dir("/Users/ana/.config/Code/Code Cache", 1)]),
+            builtin_ids(&linux, &[dir("/Users/ana/.config/Code/Code Cache", 1)]),
             ["vscode-chromium-caches"]
         );
         assert_eq!(
-            ids(&linux, &[dir("/Users/ana/.config/code/Cache", 1)]).len(),
+            builtin_ids(&linux, &[dir("/Users/ana/.config/code/Cache", 1)]).len(),
             0,
             "Linux names are exact"
         );
@@ -1037,21 +1037,10 @@ mod tests {
     /// the profile, and no Windows location, ever matches.
     #[test]
     fn chrome_caches_match_only_in_its_user_cache_directory() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
-        let ids = |env: &Environment, scanned: &[FilesystemEntry]| -> Vec<String> {
-            builtin
-                .matches(env, scanned, Timestamp::UNIX_EPOCH)
-                .into_iter()
-                .filter_map(|e| match e.fact {
-                    Fact::KnowledgeBaseMatch { entry } => Some(entry.as_str().to_owned()),
-                    _ => None,
-                })
-                .collect()
-        };
         let mac = env(Platform::Macos);
         let caches = "/Users/ana/Library/Caches/Google/Chrome";
         assert_eq!(
-            ids(
+            builtin_ids(
                 &mac,
                 &[
                     dir(&format!("{caches}/Default/Cache"), 1),
@@ -1064,7 +1053,7 @@ mod tests {
         );
         let support = "/Users/ana/Library/Application Support/Google/Chrome";
         assert_eq!(
-            ids(
+            builtin_ids(
                 &mac,
                 &[
                     dir(caches, 1),
@@ -1092,7 +1081,7 @@ mod tests {
         let mut linux = env(Platform::Linux);
         linux.vars = vec![("XDG_CACHE_HOME".to_owned(), unix("/xdg"))];
         assert_eq!(
-            ids(
+            builtin_ids(
                 &linux,
                 &[
                     dir("/Users/ana/.cache/google-chrome/Default/Cache", 1),
@@ -1103,7 +1092,7 @@ mod tests {
             ["google-chrome-caches"; 3]
         );
         assert_eq!(
-            ids(
+            builtin_ids(
                 &linux,
                 &[
                     dir("/Users/ana/.config/google-chrome/Default/Cache", 1),
@@ -1117,7 +1106,7 @@ mod tests {
         let mut win = env(Platform::Windows);
         win.local_app_data = Some(windows(r"C:\Users\ana\AppData\Local"));
         assert_eq!(
-            ids(
+            builtin_ids(
                 &win,
                 &[object(
                     windows(r"C:\Users\ana\AppData\Local\Google\Chrome\User Data\Default\Cache"),
@@ -1135,28 +1124,17 @@ mod tests {
     /// `XDG_CACHE_HOME` and at `PIP_CACHE_DIR`; never its parent or contents.
     #[test]
     fn pip_cache_matches_where_pip_documents_it() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
-        let ids = |env: &Environment, scanned: &[FilesystemEntry]| -> Vec<String> {
-            builtin
-                .matches(env, scanned, Timestamp::UNIX_EPOCH)
-                .into_iter()
-                .filter_map(|e| match e.fact {
-                    Fact::KnowledgeBaseMatch { entry } => Some(entry.as_str().to_owned()),
-                    _ => None,
-                })
-                .collect()
-        };
         let mut linux = env(Platform::Linux);
         linux.vars = vec![("XDG_CACHE_HOME".to_owned(), unix("/xdg"))];
         assert_eq!(
-            ids(
+            builtin_ids(
                 &linux,
                 &[dir("/Users/ana/.cache/pip", 1), dir("/xdg/pip", 2)]
             ),
             ["pip-cache", "pip-cache"]
         );
         assert_eq!(
-            ids(
+            builtin_ids(
                 &linux,
                 &[
                     dir("/Users/ana/.cache/Pip", 1),
@@ -1170,14 +1148,14 @@ mod tests {
         let mut mac = env(Platform::Macos);
         mac.vars = linux.vars.clone();
         assert_eq!(
-            ids(
+            builtin_ids(
                 &mac,
                 &[dir("/Users/ana/Library/Caches/pip", 1), dir("/xdg/pip", 2)]
             ),
             ["pip-cache", "pip-cache"]
         );
         assert_eq!(
-            ids(&mac, &[dir("/Users/ana/.cache/pip", 1)]).len(),
+            builtin_ids(&mac, &[dir("/Users/ana/.cache/pip", 1)]).len(),
             0,
             "macOS uses ~/.cache only through XDG_CACHE_HOME"
         );
@@ -1192,7 +1170,7 @@ mod tests {
             )
         };
         assert_eq!(
-            ids(
+            builtin_ids(
                 &win,
                 &[
                     local(r"pip\Cache", 1),
@@ -1203,7 +1181,7 @@ mod tests {
             ["pip-cache", "pip-cache", "pip-cache"]
         );
         assert_eq!(
-            ids(&win, &[local("pip", 1), local(r"pip\Cache\wheels", 2)]).len(),
+            builtin_ids(&win, &[local("pip", 1), local(r"pip\Cache\wheels", 2)]).len(),
             0
         );
     }
@@ -1213,21 +1191,11 @@ mod tests {
     /// apps' updaters and anything but a real directory never match.
     #[test]
     fn electron_update_staging_matches_only_the_named_folders() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
-        let ids = |env: &Environment, scanned: &[FilesystemEntry]| -> Vec<String> {
-            builtin
-                .matches(env, scanned, Timestamp::UNIX_EPOCH)
-                .into_iter()
-                .filter_map(|e| match e.fact {
-                    Fact::KnowledgeBaseMatch { entry } => Some(entry.as_str().to_owned()),
-                    _ => None,
-                })
-                .collect()
-        };
+        let builtin = builtin();
         let mac = env(Platform::Macos);
         let caches = |tail: &str, ino| dir(&format!("/Users/ana/Library/Caches/{tail}"), ino);
         assert_eq!(
-            ids(
+            builtin_ids(
                 &mac,
                 &[
                     caches("com.microsoft.VSCode.ShipIt", 1),
@@ -1252,7 +1220,7 @@ mod tests {
             );
         }
         assert_eq!(
-            ids(
+            builtin_ids(
                 &mac,
                 &[
                     caches("com.microsoft.VSCode.ShipIt/update.Fwhrz8L", 1),
@@ -1271,9 +1239,9 @@ mod tests {
             EntryKind::File,
             1,
         );
-        assert_eq!(ids(&mac, &[file]).len(), 0);
+        assert_eq!(builtin_ids(&mac, &[file]).len(), 0);
         assert_eq!(
-            ids(
+            builtin_ids(
                 &env(Platform::Linux),
                 &[caches("notion.id.ShipIt", 1), caches("notion-updater", 2)]
             )
@@ -1287,21 +1255,10 @@ mod tests {
     /// Windows location (the cache is inside the profile there), ever matches.
     #[test]
     fn edge_caches_match_only_in_its_user_cache_directory() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
-        let ids = |env: &Environment, scanned: &[FilesystemEntry]| -> Vec<String> {
-            builtin
-                .matches(env, scanned, Timestamp::UNIX_EPOCH)
-                .into_iter()
-                .filter_map(|e| match e.fact {
-                    Fact::KnowledgeBaseMatch { entry } => Some(entry.as_str().to_owned()),
-                    _ => None,
-                })
-                .collect()
-        };
         let mac = env(Platform::Macos);
         let caches = "/Users/ana/Library/Caches/Microsoft Edge";
         assert_eq!(
-            ids(
+            builtin_ids(
                 &mac,
                 &[
                     dir(&format!("{caches}/Default/Cache"), 1),
@@ -1312,7 +1269,7 @@ mod tests {
         );
         let support = "/Users/ana/Library/Application Support/Microsoft Edge";
         assert_eq!(
-            ids(
+            builtin_ids(
                 &mac,
                 &[
                     dir(caches, 1),
@@ -1334,7 +1291,7 @@ mod tests {
         let mut linux = env(Platform::Linux);
         linux.vars = vec![("XDG_CACHE_HOME".to_owned(), unix("/xdg"))];
         assert_eq!(
-            ids(
+            builtin_ids(
                 &linux,
                 &[
                     dir("/Users/ana/.cache/microsoft-edge/Default/Cache", 1),
@@ -1344,7 +1301,7 @@ mod tests {
             ["microsoft-edge-caches"; 2]
         );
         assert_eq!(
-            ids(
+            builtin_ids(
                 &linux,
                 &[dir("/Users/ana/.config/microsoft-edge/Default/Cache", 1)]
             )
@@ -1354,7 +1311,7 @@ mod tests {
         let mut win = env(Platform::Windows);
         win.local_app_data = Some(windows(r"C:\Users\ana\AppData\Local"));
         assert_eq!(
-            ids(
+            builtin_ids(
                 &win,
                 &[object(
                     windows(r"C:\Users\ana\AppData\Local\Microsoft\Edge\User Data\Default\Cache"),
@@ -1373,28 +1330,18 @@ mod tests {
     /// default, and its artifacts never match.
     #[test]
     fn poetry_matches_only_its_repository_cache() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
-        let ids = |env: &Environment, scanned: &[FilesystemEntry]| -> Vec<String> {
-            builtin
-                .matches(env, scanned, Timestamp::UNIX_EPOCH)
-                .into_iter()
-                .filter_map(|e| match e.fact {
-                    Fact::KnowledgeBaseMatch { entry } => Some(entry.as_str().to_owned()),
-                    _ => None,
-                })
-                .collect()
-        };
+        let builtin = builtin();
         let mac = env(Platform::Macos);
         let poetry =
             |tail: &str, ino| dir(&format!("/Users/ana/Library/Caches/pypoetry{tail}"), ino);
         let default = unix("/Users/ana/Library/Caches/pypoetry/cache/repositories");
         assert_eq!(
-            ids(&mac, &[poetry("/cache/repositories", 1)]),
+            builtin_ids(&mac, &[poetry("/cache/repositories", 1)]),
             ["poetry-repository-cache"]
         );
         assert!(builtin.command_acts_on(&mac, "poetry-repository-cache", &default));
         assert_eq!(
-            ids(
+            builtin_ids(
                 &mac,
                 &[
                     poetry("", 1),
@@ -1412,7 +1359,7 @@ mod tests {
         custom.vars = vec![("POETRY_CACHE_DIR".to_owned(), unix("/custom/poetry"))];
         let configured = unix("/custom/poetry/cache/repositories");
         assert_eq!(
-            ids(&custom, &[dir("/custom/poetry/cache/repositories", 1)]),
+            builtin_ids(&custom, &[dir("/custom/poetry/cache/repositories", 1)]),
             ["poetry-repository-cache"]
         );
         assert!(builtin.command_acts_on(&custom, "poetry-repository-cache", &configured));
@@ -1420,7 +1367,7 @@ mod tests {
         let mut linux = env(Platform::Linux);
         linux.vars = vec![("XDG_CACHE_HOME".to_owned(), unix("/xdg"))];
         assert_eq!(
-            ids(
+            builtin_ids(
                 &linux,
                 &[
                     dir("/Users/ana/.cache/pypoetry/cache/repositories", 1),
@@ -1432,7 +1379,7 @@ mod tests {
         let mut win = env(Platform::Windows);
         win.local_app_data = Some(windows(r"C:\Users\ana\AppData\Local"));
         assert_eq!(
-            ids(
+            builtin_ids(
                 &win,
                 &[object(
                     windows(r"C:\Users\ana\AppData\Local\pypoetry\Cache\cache\repositories"),
@@ -1448,21 +1395,10 @@ mod tests {
     /// `XDG_CACHE_HOME`, apart from the store and never its contents.
     #[test]
     fn pnpm_metadata_cache_stays_separate_from_the_store() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
-        let ids = |env: &Environment, scanned: &[FilesystemEntry]| -> Vec<String> {
-            builtin
-                .matches(env, scanned, Timestamp::UNIX_EPOCH)
-                .into_iter()
-                .filter_map(|e| match e.fact {
-                    Fact::KnowledgeBaseMatch { entry } => Some(entry.as_str().to_owned()),
-                    _ => None,
-                })
-                .collect()
-        };
         let mut mac = env(Platform::Macos);
         mac.vars = vec![("XDG_CACHE_HOME".to_owned(), unix("/xdg"))];
         assert_eq!(
-            ids(
+            builtin_ids(
                 &mac,
                 &[
                     dir("/Users/ana/Library/Caches/pnpm", 1),
@@ -1473,7 +1409,7 @@ mod tests {
             ["pnpm-metadata-cache", "pnpm-metadata-cache", "pnpm-store"]
         );
         assert_eq!(
-            ids(
+            builtin_ids(
                 &mac,
                 &[
                     dir("/Users/ana/Library/Caches/pnpm/v12", 1),
@@ -1491,7 +1427,7 @@ mod tests {
             0
         );
         assert_eq!(
-            ids(&env(Platform::Linux), &[dir("/Users/ana/.cache/pnpm", 1)]),
+            builtin_ids(&env(Platform::Linux), &[dir("/Users/ana/.cache/pnpm", 1)]),
             ["pnpm-metadata-cache"]
         );
         let mut win = env(Platform::Windows);
@@ -1504,7 +1440,7 @@ mod tests {
             )
         };
         assert_eq!(
-            ids(&win, &[local("pnpm-cache"), local("pnpm")]),
+            builtin_ids(&win, &[local("pnpm-cache"), local("pnpm")]),
             ["pnpm-metadata-cache"]
         );
     }
@@ -1513,26 +1449,16 @@ mod tests {
     /// at `DOTSLASH_CACHE`; its command acts on the configured folder only.
     #[test]
     fn dotslash_cache_matches_where_dotslash_documents_it() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
-        let ids = |env: &Environment, scanned: &[FilesystemEntry]| -> Vec<String> {
-            builtin
-                .matches(env, scanned, Timestamp::UNIX_EPOCH)
-                .into_iter()
-                .filter_map(|e| match e.fact {
-                    Fact::KnowledgeBaseMatch { entry } => Some(entry.as_str().to_owned()),
-                    _ => None,
-                })
-                .collect()
-        };
+        let builtin = builtin();
         let mut mac = env(Platform::Macos);
         let default = unix("/Users/ana/Library/Caches/dotslash");
         assert_eq!(
-            ids(&mac, &[dir("/Users/ana/Library/Caches/dotslash", 1)]),
+            builtin_ids(&mac, &[dir("/Users/ana/Library/Caches/dotslash", 1)]),
             ["dotslash-cache"]
         );
         assert!(builtin.command_acts_on(&mac, "dotslash-cache", &default));
         assert_eq!(
-            ids(
+            builtin_ids(
                 &mac,
                 &[
                     dir("/Users/ana/Library/Caches/dotslash/locks", 1),
@@ -1549,13 +1475,16 @@ mod tests {
             0
         );
         mac.vars = vec![("DOTSLASH_CACHE".to_owned(), unix("/custom/ds"))];
-        assert_eq!(ids(&mac, &[dir("/custom/ds", 1)]), ["dotslash-cache"]);
+        assert_eq!(
+            builtin_ids(&mac, &[dir("/custom/ds", 1)]),
+            ["dotslash-cache"]
+        );
         assert!(builtin.command_acts_on(&mac, "dotslash-cache", &unix("/custom/ds")));
         assert!(!builtin.command_acts_on(&mac, "dotslash-cache", &default));
         let mut linux = env(Platform::Linux);
         linux.vars = vec![("XDG_CACHE_HOME".to_owned(), unix("/xdg"))];
         assert_eq!(
-            ids(
+            builtin_ids(
                 &linux,
                 &[
                     dir("/Users/ana/.cache/dotslash", 1),
@@ -1567,7 +1496,7 @@ mod tests {
         let mut win = env(Platform::Windows);
         win.local_app_data = Some(windows(r"C:\Users\ana\AppData\Local"));
         assert_eq!(
-            ids(
+            builtin_ids(
                 &win,
                 &[object(
                     windows(r"C:\Users\ana\AppData\Local\dotslash"),
@@ -1583,21 +1512,10 @@ mod tests {
     /// and `RUSTUP_HOME`; toolchains and rustup's own state never do.
     #[test]
     fn rustup_matches_only_downloads_and_temporary_files() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
-        let ids = |env: &Environment, scanned: &[FilesystemEntry]| -> Vec<String> {
-            builtin
-                .matches(env, scanned, Timestamp::UNIX_EPOCH)
-                .into_iter()
-                .filter_map(|e| match e.fact {
-                    Fact::KnowledgeBaseMatch { entry } => Some(entry.as_str().to_owned()),
-                    _ => None,
-                })
-                .collect()
-        };
         let mut mac = env(Platform::Macos);
         mac.vars = vec![("RUSTUP_HOME".to_owned(), unix("/opt/rustup"))];
         assert_eq!(
-            ids(
+            builtin_ids(
                 &mac,
                 &[
                     dir("/Users/ana/.rustup/downloads", 1),
@@ -1614,7 +1532,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            ids(
+            builtin_ids(
                 &mac,
                 &[
                     dir("/Users/ana/.rustup", 1),
@@ -1631,7 +1549,7 @@ mod tests {
         let mut win = env(Platform::Windows);
         win.home = Some(windows(r"C:\Users\ana"));
         assert_eq!(
-            ids(
+            builtin_ids(
                 &win,
                 &[object(
                     windows(r"C:\Users\ana\.rustup\downloads"),
@@ -1645,7 +1563,7 @@ mod tests {
 
     #[test]
     fn npx_cache_stays_separate_from_packages_and_the_download_cache() {
-        let kb = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
+        let kb = builtin();
         for platform in [Platform::Macos, Platform::Linux, Platform::Windows] {
             let (base, custom) = if platform == Platform::Windows {
                 ("C:/Users/ana/AppData/Local/npm-cache", "D:/cache")
@@ -1726,21 +1644,10 @@ mod tests {
     /// a profile, no other channel and no Windows location ever matches.
     #[test]
     fn brave_caches_match_only_in_its_user_cache_directory() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
-        let ids = |env: &Environment, scanned: &[FilesystemEntry]| -> Vec<String> {
-            builtin
-                .matches(env, scanned, Timestamp::UNIX_EPOCH)
-                .into_iter()
-                .filter_map(|e| match e.fact {
-                    Fact::KnowledgeBaseMatch { entry } => Some(entry.as_str().to_owned()),
-                    _ => None,
-                })
-                .collect()
-        };
         let mac = env(Platform::Macos);
         let caches = "/Users/ana/Library/Caches/BraveSoftware/Brave-Browser";
         assert_eq!(
-            ids(
+            builtin_ids(
                 &mac,
                 &[
                     dir(&format!("{caches}/Default/Cache"), 1),
@@ -1751,7 +1658,7 @@ mod tests {
         );
         let support = "/Users/ana/Library/Application Support/BraveSoftware/Brave-Browser";
         assert_eq!(
-            ids(
+            builtin_ids(
                 &mac,
                 &[
                     dir(caches, 1),
@@ -1772,7 +1679,7 @@ mod tests {
         let mut linux = env(Platform::Linux);
         linux.vars = vec![("XDG_CACHE_HOME".to_owned(), unix("/xdg"))];
         assert_eq!(
-            ids(
+            builtin_ids(
                 &linux,
                 &[
                     dir(
@@ -1785,7 +1692,7 @@ mod tests {
             ["brave-browser-caches"; 2]
         );
         assert_eq!(
-            ids(
+            builtin_ids(
                 &linux,
                 &[
                     dir(
@@ -1804,7 +1711,7 @@ mod tests {
         let mut win = env(Platform::Windows);
         win.local_app_data = Some(windows(r"C:\Users\ana\AppData\Local"));
         assert_eq!(
-            ids(
+            builtin_ids(
                 &win,
                 &[object(
                     windows(
@@ -1824,7 +1731,7 @@ mod tests {
     /// home folder's sign-in state, code-signing keys and settings never do.
     #[test]
     fn expo_matches_only_its_download_caches() {
-        let kb = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
+        let kb = builtin();
         for platform in [Platform::Macos, Platform::Linux, Platform::Windows] {
             let home = if platform == Platform::Windows {
                 windows(r"C:\Users\ana")
@@ -1921,7 +1828,7 @@ mod tests {
 
     #[test]
     fn nextjs_matches_only_a_projects_build_cache() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
+        let builtin = builtin();
         for platform in [Platform::Macos, Platform::Linux, Platform::Windows] {
             let path = |tail: &str| {
                 if platform == Platform::Windows {
@@ -1955,7 +1862,7 @@ mod tests {
                 Fact::KnowledgeBaseMatch { entry } if entry.as_str() == "nextjs-build-cache"
             ));
             let (cache, rest) = scanned.split_at(1);
-            assert_eq!(chunked(&builtin, &environment, &[cache, rest]), found);
+            assert_eq!(chunked(builtin, &environment, &[cache, rest]), found);
         }
     }
 
@@ -1964,7 +1871,7 @@ mod tests {
     /// configuration and security folders and `~/.swiftpm` links never do.
     #[test]
     fn swiftpm_matches_only_its_fetched_dependency_caches() {
-        let kb = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
+        let kb = builtin();
         let ids = |environment: &Environment, scanned: &[FilesystemEntry]| -> Vec<u128> {
             kb.matches(environment, scanned, Timestamp::UNIX_EPOCH)
                 .into_iter()
@@ -2044,7 +1951,7 @@ mod tests {
 
     #[test]
     fn cargo_matches_intermediates_but_not_deliverables() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
+        let builtin = builtin();
         for platform in [Platform::Macos, Platform::Linux, Platform::Windows] {
             let path = |tail: &str| {
                 if platform == Platform::Windows {
@@ -2095,13 +2002,13 @@ mod tests {
                 ));
             }
             let (caches, rest) = scanned.split_at(6);
-            assert_eq!(chunked(&builtin, &environment, &[caches, rest]), found);
+            assert_eq!(chunked(builtin, &environment, &[caches, rest]), found);
         }
     }
 
     #[test]
     fn cargo_requires_a_regular_manifest_and_a_real_cache_directory() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
+        let builtin = builtin();
         let environment = env(Platform::Linux);
         let cache = dir("/src/app/target/debug/deps", 1);
         assert_eq!(
@@ -2148,7 +2055,7 @@ mod tests {
     /// file at its path, or the same name on another platform.
     #[test]
     fn react_native_matches_only_its_shared_prebuilt_cache() {
-        let kb = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
+        let kb = builtin();
         let ids = |environment: &Environment, scanned: &[FilesystemEntry]| -> Vec<u128> {
             kb.matches(environment, scanned, Timestamp::UNIX_EPOCH)
                 .into_iter()
@@ -2196,7 +2103,7 @@ mod tests {
 
     /// The objects in `scanned` that matched `node-modules-with-lockfile`.
     fn node_modules(environment: &Environment, scanned: &[FilesystemEntry]) -> Vec<u128> {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
+        let builtin = builtin();
         builtin
             .matches(environment, scanned, Timestamp::UNIX_EPOCH)
             .into_iter()
@@ -2213,7 +2120,7 @@ mod tests {
 
     #[test]
     fn node_modules_matches_beside_any_lockfile() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
+        let builtin = builtin();
         for platform in [Platform::Macos, Platform::Linux, Platform::Windows] {
             let path = |tail: &str| {
                 if platform == Platform::Windows {
@@ -2240,7 +2147,7 @@ mod tests {
                 );
                 let (modules, rest) = scanned.split_at(1);
                 assert_eq!(
-                    chunked(&builtin, &environment, &[modules, rest]),
+                    chunked(builtin, &environment, &[modules, rest]),
                     builtin.matches(&environment, &scanned, Timestamp::UNIX_EPOCH),
                     "{platform:?}, {lockfile}"
                 );
@@ -2298,7 +2205,7 @@ mod tests {
 
     #[test]
     fn node_modules_inside_node_modules_never_match_on_their_own() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
+        let builtin = builtin();
         for platform in [Platform::Macos, Platform::Linux, Platform::Windows] {
             let path = |tail: &str| {
                 if platform == Platform::Windows {
@@ -2351,7 +2258,7 @@ mod tests {
             assert_eq!(node_modules(&environment, &scanned), [1], "{platform:?}");
             let (outer, rest) = scanned.split_at(2);
             assert_eq!(
-                chunked(&builtin, &environment, &[rest, outer]),
+                chunked(builtin, &environment, &[rest, outer]),
                 builtin.matches(&environment, &[rest, outer].concat(), Timestamp::UNIX_EPOCH),
                 "{platform:?}"
             );
@@ -2360,7 +2267,7 @@ mod tests {
 
     #[test]
     fn android_gradle_matches_intermediates_but_not_outputs() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
+        let builtin = builtin();
         for platform in [Platform::Macos, Platform::Linux, Platform::Windows] {
             let path = |tail: &str| {
                 if platform == Platform::Windows {
@@ -2418,13 +2325,13 @@ mod tests {
                 ));
             }
             let (caches, rest) = scanned.split_at(2);
-            assert_eq!(chunked(&builtin, &environment, &[caches, rest]), found);
+            assert_eq!(chunked(builtin, &environment, &[caches, rest]), found);
         }
     }
 
     #[test]
     fn android_gradle_requires_a_regular_build_script_and_a_real_directory() {
-        let builtin = KnowledgeBase::builtin().unwrap_or_else(|e| unreachable!("{e}"));
+        let builtin = builtin();
         let environment = env(Platform::Macos);
         let cache = dir("/src/app/build/intermediates", 1);
         assert_eq!(
