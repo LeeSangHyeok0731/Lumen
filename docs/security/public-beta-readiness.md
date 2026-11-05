@@ -78,6 +78,14 @@ presented for user selection.
 **Action:** Add sourced Linux system-path protections and fixtures, or limit
 Linux whole-disk scanning until those protections exist.
 
+**Progress (2026-11-04):** policy 0.18.0 keeps `/usr` (with `/usr/local`), `/etc`,
+`/boot`, `/efi`, `/var/lib`, `/bin`, `/sbin`, `/lib` and `/lib64` on Linux, with
+everything below them (`protect.location.linux-*`, sourced from UAPI.9), and the
+ancestor rule keeps `/` and `/var`
+([research 34](../research/34-linux-system-locations.md)). `/var/cache`, `/var/tmp`,
+`/tmp`, `/var/log`, `/opt` and `/srv` stay open to the existing rules; research 34
+says why.
+
 ### UX-1: Partial scans can show a previous scan's results
 
 **Evidence:** A scan that stops early is recorded as cancelled, while assessment

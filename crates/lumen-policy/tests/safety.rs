@@ -154,6 +154,7 @@ fn path() -> impl Strategy<Value = Vec<RawPath>> {
             Just("/home/t/.ssh/id_ed25519"),
             Just("/usr/lib/x"),
             Just("/usr/local/x"),
+            Just("/etc/x"),
             Just("/System/Library/x"),
             Just("/home/t/Library/CloudStorage/Dropbox/app/node_modules"),
             Just("/home/t/Dropbox/app/node_modules"),
@@ -274,12 +275,17 @@ fn must_keep(input: &PolicyInput) -> bool {
         .observed
         .as_ref()
         .is_none_or(|o| !o.complete || !o.entry.access.is_observed());
-    let system_path = input.context.platform == Platform::Macos
-        && input.paths.iter().any(|p| {
-            let bytes = p.as_bytes();
-            bytes.starts_with(b"/System/")
-                || (bytes.starts_with(b"/usr/") && !bytes.starts_with(b"/usr/local/"))
-        });
+    let system_path = input.paths.iter().any(|p| {
+        let bytes = p.as_bytes();
+        match input.context.platform {
+            Platform::Macos => {
+                bytes.starts_with(b"/System/")
+                    || (bytes.starts_with(b"/usr/") && !bytes.starts_with(b"/usr/local/"))
+            }
+            Platform::Linux => bytes.starts_with(b"/usr/") || bytes.starts_with(b"/etc/"),
+            _ => false,
+        }
+    });
     let sensitive_path = input
         .paths
         .iter()
@@ -295,13 +301,13 @@ fn must_keep(input: &PolicyInput) -> bool {
 
 /// Whether a path of the input is a folder holding a protected location
 /// (security audit FS-3): the home folder holds `.ssh`, `~/.config` Chrome's
-/// Linux profile, `~/Library` the macOS keychains and `/private/var` the
-/// macOS system database.
+/// Linux profile, `~/Library` the macOS keychains, `/private/var` the
+/// macOS system database and `/var` Linux's `/var/lib`.
 fn holds_protected(input: &PolicyInput) -> bool {
     let mac = input.context.platform == Platform::Macos;
     input.paths.iter().any(|p| match p.as_bytes() {
         b"/home/t" => true,
-        b"/home/t/.config" => !mac,
+        b"/home/t/.config" | b"/var" => !mac,
         b"/home/t/Library" | b"/private/var" => mac,
         _ => false,
     })
@@ -314,6 +320,7 @@ fn holder() -> impl Strategy<Value = RawPath> {
         Just("/home/t/.config"),
         Just("/home/t/Library"),
         Just("/private/var"),
+        Just("/var"),
     ]
     .prop_map(|p| {
         RawPath::from_unix_bytes(p.as_bytes().to_vec()).unwrap_or_else(|_| unreachable!())

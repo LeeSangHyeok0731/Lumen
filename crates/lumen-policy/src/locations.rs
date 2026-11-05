@@ -489,6 +489,10 @@ mod tests {
         assert_eq!(linux("/home/ana/.Config"), None, "case-sensitive");
         assert_eq!(linux("/home/ANA"), None, "case-sensitive");
         assert_eq!(linux("/private/var"), None, "macOS-only entries");
+        for path in ["/", "/var"] {
+            assert!(linux(path).is_some(), "{path} holds Linux system locations");
+        }
+        assert_eq!(linux("/var").as_deref(), Some("protect.contains-system"));
     }
 
     #[test]
@@ -610,7 +614,46 @@ mod tests {
         );
         assert_eq!(mac("/private/var/folders/x"), None);
         assert_eq!(mac("/Users/ana/System"), None, "anchored at the root");
-        assert_eq!(linux("/usr/lib"), None, "macOS-only entries");
+        assert_eq!(linux("/System/Library"), None, "macOS-only entries");
+    }
+
+    #[test]
+    fn linux_system_locations_are_kept() {
+        for (path, id) in [
+            ("/usr", "linux-usr"),
+            ("/usr/lib/x86_64-linux-gnu/libc.so.6", "linux-usr"),
+            ("/usr/local/bin/tool", "linux-usr"),
+            ("/etc/fstab", "linux-etc"),
+            ("/boot/vmlinuz", "linux-boot"),
+            ("/efi/EFI/BOOT", "linux-efi"),
+            ("/var/lib/dpkg/status", "linux-var-lib"),
+            ("/bin", "linux-bin"),
+            ("/sbin", "linux-sbin"),
+            ("/lib", "linux-lib"),
+            ("/lib64/ld-linux-x86-64.so.2", "linux-lib64"),
+        ] {
+            assert_eq!(
+                linux(path),
+                Some(format!("protect.location.{id}")),
+                "{path}"
+            );
+        }
+        for path in [
+            // Cache and temporary data the specification lets be flushed.
+            "/var/cache/apt",
+            "/var/tmp/x",
+            "/tmp/x",
+            "/opt/app",
+            // Look-alikes, other roots and case.
+            "/usr2",
+            "/etcetera",
+            "/var/library",
+            "/home/ana/usr",
+            "/USR/lib",
+        ] {
+            assert_eq!(linux(path), None, "{path}");
+        }
+        assert_eq!(mac("/var/lib/x"), None, "Linux-only entries");
     }
 
     #[test]
