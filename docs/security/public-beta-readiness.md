@@ -257,6 +257,13 @@ unchanged.
   ([`consult.rs`](../../crates/lumen-application/src/consult.rs),
   [`openrouter.rs`](../../crates/lumen-jev/src/openrouter.rs)). Stop after the
   first unavailable answer and cap requests per assessment.
+  **Progress (2026-11-04):** an assessment stops asking the judge at its first
+  unavailable answer (a rejected key, missing credits, a rate limit, a server
+  error or a timeout), as the description stage does; the proposals left keep
+  the policy's own decision and carry no trace. A refused or malformed answer is
+  about its item, so the next proposal is still asked
+  ([`assess.rs`](../../crates/lumen-app/src/assess.rs)). A cap on requests per
+  assessment is still open.
 - **AI-6:** The desktop app never says when AI review could not check items; the
   views carry no consultation outcome
   ([`views.rs`](../../crates/lumen-api/src/views.rs)). Report asked, answered and

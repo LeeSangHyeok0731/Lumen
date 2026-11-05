@@ -10,17 +10,18 @@
 
 use std::collections::{BTreeSet, HashSet};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use lumen_application::assess::{Assessed, Sources, decide_candidate, nested, select};
 use lumen_application::collect::{Inventory, ScanDomains, summarize};
 use lumen_application::gather::gather;
 use lumen_application::large::LargeFolders;
 use lumen_application::observe::below;
-use lumen_application::ports::{Clock, InventoryReport};
+use lumen_application::ports::{Clock, InventoryReport, JudgeError, JudgeFuture, JudgeModel};
 use lumen_devkb::{Environment, KnowledgeBase, Markers, Root};
 use lumen_domain::{
-    CleanupMechanism, Evidence, Fact, Platform, PlatformCapabilities, RawPath, Relationship,
-    ScanId, SourceName, SourceNameError, Subject,
+    CleanupMechanism, Evidence, Fact, JevRequest, JudgeDescriptor, Platform, PlatformCapabilities,
+    RawPath, Relationship, ScanId, SourceName, SourceNameError, Subject,
 };
 use lumen_policy::Context;
 use lumen_store_sqlite::{IndexStore, StoreError, open_index};
@@ -827,7 +828,7 @@ fn jev_request(
     item: u32,
     inventories_complete: bool,
     now: lumen_domain::Timestamp,
-) -> Option<lumen_domain::JevRequest> {
+) -> Option<JevRequest> {
     let observed = input.observed.as_ref()?;
     let candidate = lumen_jev::request::Candidate {
         item_ref: lumen_domain::ItemRef::new(format!("item-{item}")).ok()?,
@@ -890,8 +891,51 @@ impl JudgeOutcomes {
     }
 }
 
+/// The judge for one assessment: asked until it is unavailable, then not again
+/// (audit AI-5). A rejected key, missing credits, a rate limit or a timeout
+/// would repeat for every remaining proposal, each waiting out its own limit;
+/// the description stage stops the same way. A proposal not asked keeps the
+/// policy's own decision, as after any judge error. A refused or malformed
+/// answer is about its item, so the next proposal is still asked.
+struct UntilUnavailable<'a> {
+    judge: &'a dyn JudgeModel,
+    unavailable: AtomicBool,
+}
+
+impl<'a> UntilUnavailable<'a> {
+    fn new(judge: &'a dyn JudgeModel) -> Self {
+        Self {
+            judge,
+            unavailable: AtomicBool::new(false),
+        }
+    }
+}
+
+impl JudgeModel for UntilUnavailable<'_> {
+    fn descriptor(&self) -> Option<JudgeDescriptor> {
+        if self.unavailable.load(Ordering::Relaxed) {
+            None
+        } else {
+            self.judge.descriptor()
+        }
+    }
+
+    fn judge<'a>(&'a self, request: &'a JevRequest) -> JudgeFuture<'a> {
+        Box::pin(async move {
+            let answer = self.judge.judge(request).await;
+            if matches!(
+                answer.result,
+                Err(JudgeError::Unavailable(_) | JudgeError::Disabled)
+            ) {
+                self.unavailable.store(true, Ordering::Relaxed);
+            }
+            answer
+        })
+    }
+}
+
 /// Assesses the latest completed scan in `db`, consulting `judge` when it is
-/// configured (a `NoopJudge` never is), then asking `describer` what kind of
+/// configured (a `NoopJudge` never is) until it is unavailable, then asking `describer` what kind of
 /// item each of up to 20 of the largest review items is (ADR-0041). A
 /// description is a note beside the decision and never changes it.
 ///
@@ -902,7 +946,7 @@ impl JudgeOutcomes {
 pub fn assess(
     db: &Path,
     clock: &dyn Clock,
-    judge: &dyn lumen_application::ports::JudgeModel,
+    judge: &dyn JudgeModel,
     describer: &dyn lumen_application::ports::Describer,
 ) -> Result<Vec<Assessed>, AssessError> {
     assess_with_progress(db, clock, judge, describer, &mut |_| {})
@@ -919,7 +963,7 @@ pub fn assess(
 pub fn assess_with_progress(
     db: &Path,
     clock: &dyn Clock,
-    judge: &dyn lumen_application::ports::JudgeModel,
+    judge: &dyn JudgeModel,
     describer: &dyn lumen_application::ports::Describer,
     progress: &mut dyn FnMut(AssessProgress),
 ) -> Result<Vec<Assessed>, AssessError> {
@@ -931,6 +975,7 @@ pub fn assess_with_progress(
     let counter = std::cell::Cell::new(0_u32);
     let mut failures = DecisionFailures::default();
     let now = clock.now();
+    let judge = UntilUnavailable::new(judge);
     let request = |input: &lumen_policy::PolicyInput| {
         counter.set(counter.get().saturating_add(1));
         jev_request(input, counter.get(), assessment.inventories_complete, now)
@@ -946,7 +991,7 @@ pub fn assess_with_progress(
             let sources = assessment.sources(&subtree);
             if let Some(decided) = failures.record(
                 block_on(decide_candidate(
-                    candidate, &sources, probes, judge, clock, &request,
+                    candidate, &sources, probes, &judge, clock, &request,
                 )),
                 "assessment",
             ) {
@@ -1062,6 +1107,62 @@ mod tests {
             JudgeOutcomes::count(std::iter::empty()),
             JudgeOutcomes::default()
         );
+    }
+
+    #[test]
+    fn a_judge_is_not_asked_again_once_it_is_unavailable() -> Result<(), Box<dyn std::error::Error>>
+    {
+        use std::collections::{BTreeMap, BTreeSet};
+
+        use lumen_domain::{CandidateSummary, CoverageSummary, ItemRef, ModelId, UntrustedText};
+        use lumen_testkit::MockJudge;
+
+        let request = |item: &str| -> Result<JevRequest, Box<dyn std::error::Error>> {
+            Ok(JevRequest {
+                schema_version: JevRequest::current_schema()?,
+                item_ref: ItemRef::new(item)?,
+                candidate: CandidateSummary {
+                    category: Category::Other,
+                    path_display: UntrustedText::new("~/x"),
+                    size_bytes: ByteCount::ZERO,
+                    reclaimable_bytes: ByteCount::ZERO,
+                },
+                evidence: Vec::new(),
+                coverage: CoverageSummary {
+                    complete: true,
+                    notes: BTreeSet::new(),
+                },
+                untrusted_strings: BTreeMap::new(),
+            })
+        };
+        let descriptor = JudgeDescriptor {
+            provider: SourceName::new("mock")?,
+            model: ModelId::new("mock-1")?,
+            model_version: None,
+            prompt_version: "jev-judge/1".parse()?,
+        };
+        for (stops, error) in [
+            (false, JudgeError::NoAnswer("refused")),
+            (false, JudgeError::Malformed),
+            (
+                true,
+                JudgeError::Unavailable("OpenRouter rate limit reached"),
+            ),
+            (true, JudgeError::Disabled),
+        ] {
+            let mock = MockJudge::new(Some(descriptor.clone()))
+                .answer(ItemRef::new("c_1")?, Err(error.clone()));
+            let judge = UntilUnavailable::new(&mock);
+            assert_eq!(judge.descriptor(), Some(descriptor.clone()));
+            let answer = block_on(judge.judge(&request("c_1")?));
+            assert_eq!(answer.result, Err(error.clone()), "answers pass through");
+            assert_eq!(
+                judge.descriptor().is_none(),
+                stops,
+                "{error:?}: a judge without a descriptor is never asked"
+            );
+        }
+        Ok(())
     }
 
     fn scanned(path: &str, file: u128, bytes: u64) -> FilesystemEntry {
