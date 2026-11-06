@@ -142,6 +142,12 @@ export type CandidateView = {
    */
   reasons: Array<ReasonView>;
   /**
+   * What Lumen did not know when it decided, which "Check again" would ask
+   * (ADR-0058); empty when the verdict rests on decisions only. Optional
+   * on input for compatibility with older hosts.
+   */
+  rechecks?: Array<ReassessGapView> | null;
+  /**
    * What removing it would free now, in bytes.
    */
   reclaimable_bytes: string;
@@ -720,6 +726,80 @@ export type ReasonView = {
    * The reason in English.
    */
   text: string;
+};
+
+/**
+ * Something the earlier assessment did not know.
+ */
+export type ReassessGapView = "in_use" | "unread" | "stale" | "owner";
+
+/**
+ * How checking one item again ended.
+ */
+export type ReassessOutcomeView =
+  | {
+      kind: "settled";
+    }
+  | {
+      kind: "changed";
+    }
+  | {
+      /**
+       * How many facts the checks added.
+       */
+      added_facts: string;
+      /**
+       * The item as decided now.
+       */
+      candidate: CandidateView;
+      kind: "decided";
+    };
+
+/**
+ * Which items to check again.
+ */
+export type ReassessRequest = {
+  /**
+   * Items of the latest assessment, by [`CandidateView::id`]. Empty: every
+   * item kept or reviewed because of something Lumen did not know.
+   */
+  ids: Array<string>;
+};
+
+/**
+ * Items checked again, in order.
+ */
+export type ReassessView = {
+  /**
+   * The run stopped early; later items were not checked.
+   */
+  cancelled: boolean;
+  /**
+   * Every item checked before the run ended.
+   */
+  items: Array<ReassessedItemView>;
+};
+
+/**
+ * One item checked again.
+ */
+export type ReassessedItemView = {
+  /**
+   * Its earlier verdict.
+   */
+  before: VerdictView;
+  /**
+   * What was unknown.
+   */
+  gaps: Array<ReassessGapView>;
+  /**
+   * Its ID, as in the assessment.
+   */
+  id: string;
+  /**
+   * How it ended.
+   */
+  outcome: ReassessOutcomeView;
 };
 
 /**
