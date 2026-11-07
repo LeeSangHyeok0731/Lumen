@@ -6,9 +6,9 @@
 
 **L'intelligence du stockage sur tous vos appareils.**
 
-Lumen repère ce qui occupe votre disque et explique la nature de chaque élément.
-Seuls les éléments qu'il est sûr de nettoyer sont placés en quarantaine, où vous
-pouvez les restaurer.
+Lumen repère les éléments qui occupent votre espace disque et explique ce qu’est
+chaque élément. Seuls les éléments qu’il est certain de pouvoir supprimer sans risque
+sont mis en quarantaine, où vous pouvez les restaurer.
 
 [![Dernière version](https://img.shields.io/github/v/release/zaewc/Lumen?label=beta&color=4f46e5)](https://github.com/zaewc/Lumen/releases/latest)
 [![Rust](https://github.com/zaewc/Lumen/actions/workflows/rust.yml/badge.svg)](https://github.com/zaewc/Lumen/actions/workflows/rust.yml)
@@ -33,9 +33,10 @@ pouvez les restaurer.
 
 ## Ce que fait Lumen
 
-- **Repère ce qui occupe de l'espace**, des données DerivedData de Xcode et des caches
-  Gradle aux caches d'applications et aux anciens installateurs, sans ouvrir de fichier.
-- **Explique chaque décision.** Chaque élément est conservé, laissé à votre examen ou
+- **Repère ce qui occupe de l’espace**, depuis les données DerivedData de Xcode et les
+  caches Gradle jusqu’aux caches d’applications et aux anciens installateurs, sans ouvrir
+  de fichier.
+- **Explique chaque décision.** Chaque élément est conservé, soumis à votre examen ou
   proposé au nettoyage, avec les preuves disponibles : son origine, la possibilité de
   le recréer et son éventuelle utilisation.
 - **Ne supprime jamais de lui-même.** Le nettoyage place les éléments en quarantaine
