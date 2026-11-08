@@ -164,6 +164,11 @@ describe("memoryTransport", () => {
     expect((await preview("homebrew:act")).kind).toBe("not_found");
     const kept = await preview("mac_app:com.example.OldEditor");
     expect(kept.kind === "refused" ? kept.reasons : []).toEqual(["service_linked"]);
+    const running = await preview("mac_app:com.spotify.client");
+    expect(running.kind === "refused" ? running.reasons : []).toEqual(["running"]);
+    expect(zQuitView.parse(await transport.quitApp?.("mac_app:com.spotify.client")).kind).toBe(
+      "asked",
+    );
     const ready = await preview("mac_app:com.spotify.client");
     if (ready.kind !== "ready") {
       throw new Error("Spotify may be uninstalled");
@@ -189,6 +194,7 @@ describe("memoryTransport", () => {
   it("answers a quit request for a listed macOS app only (roadmap 16.3a)", async () => {
     const transport = memoryTransport();
     const quit = async (key: string) => zQuitView.parse(await transport.quitApp?.(key)).kind;
+    expect(await quit("mac_app:com.spotify.client")).toBe("asked");
     expect(await quit("mac_app:com.spotify.client")).toBe("not_running");
     expect(await quit("homebrew:act")).toBe("not_found");
   });
