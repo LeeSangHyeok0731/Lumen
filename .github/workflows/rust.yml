@@ -93,7 +93,7 @@ jobs:
             libjavascriptcoregtk-4.1-dev librsvg2-dev
       - name: Install cargo-nextest from crates.io
         if: env.RUN == 'true'
-        run: cargo install cargo-nextest --version 0.9.146 --locked
+        run: cargo install cargo-nextest --version 0.9.146 --locked --force
       - name: Clippy
         if: env.RUN == 'true'
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
