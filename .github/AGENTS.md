@@ -10,8 +10,8 @@ installed copy; workflows hold signing and updater secrets. Reviewed by CODEOWNE
   `persist-credentials: false`.
 - Pin every action to a full commit SHA with its version in a comment
   (`uses: owner/action@<sha> # vX.Y.Z`); download prebuilt tools with a checked
-  SHA-256, or install Go tools at pinned versions with the Go checksum database
-  enabled.
+  SHA-256, or install Go/Rust tools at pinned versions from their module
+  registries with checksum verification enabled.
 - Never interpolate `${{ … }}` from events or inputs into `run:`; pass it through
   `env:`.
 - Secrets reach only the step that needs them, never a job that runs dependency
