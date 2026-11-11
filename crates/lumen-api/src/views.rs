@@ -34,6 +34,7 @@ mod relations;
 mod software;
 mod times;
 mod uninstall;
+mod unread;
 
 pub use duplicates::{
     CompareOutcomeView, CompareProgressView, CompareStageView, DuplicateGroupView, DuplicatesView,
@@ -55,6 +56,7 @@ pub use uninstall::{
     QuitView, UninstallAppView, UninstallNoteView, UninstallOutcomeView, UninstallPreviewView,
     UninstallReasonView, UninstallResultView,
 };
+pub use unread::{UnreadFolderView, UnreadFoldersView, UnreadReasonView};
 
 fn bytes(count: ByteCount) -> String {
     count.get().to_string()

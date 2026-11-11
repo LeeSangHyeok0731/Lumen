@@ -20,7 +20,7 @@ use lumen_api::views::{
     DiskView, ExecuteRequest, FinalizeOutcomeView, HeldItemView, HelperView, PlanView,
     QuarantineReportView, QuitView, ReassessRequest, ReassessView, RestoreOutcomeView,
     ScanProgressView, ScanRequest, ScanView, SoftwareView, ToolRunView, ToolStorageView,
-    UninstallOutcomeView, UninstallPreviewView, candidate_id,
+    UninstallOutcomeView, UninstallPreviewView, UnreadFoldersView, candidate_id,
 };
 use lumen_app::ai::{ApiKey, Service};
 use lumen_app::{ScanEvent, SystemClock, UuidV7Ids};
@@ -288,6 +288,29 @@ pub(crate) async fn scan(
         )
         .map_err(CommandError::new)?;
         Ok(ScanView::from(&summary))
+    })
+    .await
+}
+
+/// The most unread folders one call returns; the view's total says how many
+/// more there are.
+const UNREAD_SHOWN: usize = 1000;
+
+/// The folders `scan` did not read in full, with why (ADR-0008). Reads only
+/// the index; the scan ID is the only input, and no path comes back to act on.
+#[tauri::command]
+pub(crate) async fn unread_folders(
+    core: State<'_, Core>,
+    scan: String,
+) -> Result<UnreadFoldersView, CommandError> {
+    let db = core.db.clone();
+    blocking(move || {
+        let scan: ScanId = scan
+            .parse()
+            .map_err(|_| CommandError::new("not a scan ID"))?;
+        let unread = lumen_app::unread::unread_folders(&db, scan, UNREAD_SHOWN)
+            .map_err(CommandError::new)?;
+        Ok(UnreadFoldersView::from(&unread))
     })
     .await
 }

@@ -718,8 +718,28 @@ impl IndexStore {
     /// Returns [`StoreError::Corrupt`] for any row that fails validation, or
     /// [`StoreError`] if SQLite fails.
     pub fn unlisted_directories(&self, scan: ScanId) -> Result<Vec<RawPath>, StoreError> {
+        Ok(self
+            .unread_directories(scan)?
+            .into_iter()
+            .map(|(path, _)| path)
+            .collect())
+    }
+
+    /// [`unlisted_directories`](Self::unlisted_directories), each with how
+    /// reading it ended: `None` when it was never listed (not entered: a mount
+    /// point, an excluded folder, or one the scan did not reach), otherwise
+    /// the refused, failed or cut-short listing. Ordered as the store's
+    /// whole-scan reads.
+    ///
+    /// # Errors
+    ///
+    /// As [`unlisted_directories`](Self::unlisted_directories).
+    pub fn unread_directories(
+        &self,
+        scan: ScanId,
+    ) -> Result<Vec<(RawPath, Option<DirOutcome>)>, StoreError> {
         let mut query = self.conn.prepare_cached(
-            "SELECT d.flavor, d.path, e.name
+            "SELECT d.flavor, d.path, e.name, l.access, l.complete
              FROM dirs d CROSS JOIN entries e ON e.dir = d.id
              LEFT JOIN listings l ON l.dir = e.dir AND l.name = e.name
              WHERE d.scan = (SELECT key FROM scans WHERE id = ?1) AND e.kind = ?2
@@ -732,7 +752,7 @@ impl IndexStore {
                 kind_text(EntryKind::Directory),
                 access_text(AccessState::Readable)?
             ],
-            |row| Ok(path_from_row(row)),
+            |row| Ok(unread_from_row(row)),
         )?;
         rows.map(|row| row?).collect()
     }
@@ -750,6 +770,23 @@ fn path_from_row(row: &Row<'_>) -> Result<RawPath, StoreError> {
     let mut path: Vec<u8> = row.get(1)?;
     path.extend_from_slice(&row.get::<_, Vec<u8>>(2)?);
     RawPath::from_stored(flavor, path).map_err(|_| StoreError::corrupt("path"))
+}
+
+/// An unread directory's row: as [`listing_from_row`], with the listing's
+/// columns null when it was never listed.
+fn unread_from_row(row: &Row<'_>) -> Result<(RawPath, Option<DirOutcome>), StoreError> {
+    let path = path_from_row(row)?;
+    let access: Option<String> = row.get(3)?;
+    let complete: Option<bool> = row.get(4)?;
+    let outcome = match (access, complete) {
+        (Some(access), Some(complete)) => Some(DirOutcome {
+            access: parse_access(&access)?,
+            complete,
+        }),
+        (None, None) => None,
+        _ => return Err(StoreError::corrupt("listings")),
+    };
+    Ok((path, outcome))
 }
 
 /// A listing row: flavor, directory path, name, access, complete.
@@ -1521,6 +1558,21 @@ pub(crate) mod tests {
             store.unlisted_directories(scan)?,
             [raw(b"/r/denied"), raw(b"/r/never"), raw(b"/r/partial")],
             "files are never listings"
+        );
+        assert_eq!(
+            store.unread_directories(scan)?,
+            [
+                (
+                    raw(b"/r/denied"),
+                    Some(outcome(AccessState::Denied(DenialReason::Posix), false))
+                ),
+                (raw(b"/r/never"), None),
+                (
+                    raw(b"/r/partial"),
+                    Some(outcome(AccessState::Readable, false))
+                ),
+            ],
+            "each with how reading it ended"
         );
         Ok(())
     }
