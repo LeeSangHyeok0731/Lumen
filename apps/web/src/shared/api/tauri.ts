@@ -26,6 +26,7 @@ import {
   zToolStorageView,
   zUninstallOutcomeView,
   zUninstallPreviewView,
+  zUnreadFoldersView,
   zUpdateView,
 } from "@lumen/api-client";
 import { Channel, type InvokeArgs, invoke } from "@tauri-apps/api/core";
@@ -135,6 +136,7 @@ export function tauriTransport(): LumenTransport {
       await call("helper_open_login_items");
     },
     appIcon: async (key) => zAppIcon.parse(await call("app_icon", { key })),
+    unreadFolders: async (scan) => zUnreadFoldersView.parse(await call("unread_folders", { scan })),
     setAiReview: async (enabled) => zAiSettingsView.parse(await call("set_ai_review", { enabled })),
     setAiKey: async (key) => zAiSettingsView.parse(await call("set_ai_key", { key })),
   };

@@ -410,6 +410,29 @@ export const ja: Messages = {
   },
   details: {
     title: "スキャンの詳細",
+    unread: {
+      title: "読み取れなかったフォルダー",
+      loading: "読み込み中…",
+      failed: "一覧を読み込めませんでした。",
+      more: (n: string) => `ほか${count(n)}件`,
+      reasons: {
+        privacy:
+          "macOS のプライバシー保護により読み取れませんでした。フルディスクアクセスを許可すると読み取れる場合があります。",
+        system_protected:
+          "macOS が保護しているフォルダーです。正常なので、変更する必要はありません。",
+        permissions:
+          "このアカウントには読み取る権限がありません。システムフォルダーであれば正常です。",
+        out_of_scope: "このデバイスで Lumen が読み取れる範囲の外です。",
+        denied: "アクセスが拒否されました。",
+        vanished: "スキャン中に削除されました。",
+        timed_out:
+          "読み取りに時間がかかりすぎました。もう一度スキャンすると読み取れる場合があります。",
+        failed: "読み取れませんでした。",
+        cut_short: "一部だけ読み取りました。",
+        not_entered:
+          "スキャンしていません。別のディスクにある、除外されている、またはスキャンが届かなかったフォルダーです。",
+      },
+    },
     entries: (entries: string) => `${count(entries)}件を読み取り`,
     files: "ファイル",
     fileCount: (files: string) => count(files),
