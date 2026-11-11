@@ -119,14 +119,14 @@ impl Executor {
     }
 
     fn store(&self, volume: u64) -> Option<Store> {
-        self.store_for(volume).ok()
+        self.open_on(volume).ok()
     }
 
     /// The store on `volume`, or why it cannot be used:
     /// [`QuarantineFailure::VolumeUnsupported`] if the store is on another
     /// volume, [`QuarantineFailure::StoreUnavailable`] if it failed a check
     /// or cannot be reached (ADR-0066).
-    fn store_for(&self, volume: u64) -> Result<Store, QuarantineFailure> {
+    fn open_on(&self, volume: u64) -> Result<Store, QuarantineFailure> {
         let names: Vec<&[u8]> = self.store_names.iter().map(Vec::as_slice).collect();
         open_store(&self.store_base, &names, volume).map_err(|error| match error {
             StoreError::OtherVolume => QuarantineFailure::VolumeUnsupported,
@@ -261,7 +261,7 @@ impl QuarantineExecutor for Executor {
         let plan = prepared.plan();
         let verified = verify(&plan).map_err(|_| at_source(QuarantineFailure::IdentityMismatch))?;
         let store = self
-            .store_for(plan.expected.identity.dev)
+            .open_on(plan.expected.identity.dev)
             .map_err(at_source)?;
         let name = operation.to_string();
         move_into(&verified, &store, name.as_bytes(), &plan.expected).map_err(|error| {
