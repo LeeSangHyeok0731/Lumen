@@ -35,6 +35,7 @@ const allowed = new Set([
   "helper_disable",
   "helper_open_login_items",
   "app_icon",
+  "unread_folders",
 ]);
 
 window.__TAURI_ISOLATION_HOOK__ = (payload) => {

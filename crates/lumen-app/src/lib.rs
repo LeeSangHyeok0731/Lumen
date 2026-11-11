@@ -35,6 +35,7 @@ pub mod system;
 pub mod tools;
 #[cfg(any(unix, windows))]
 pub mod uninstall;
+pub mod unread;
 #[cfg(target_os = "macos")]
 pub mod usage;
 pub mod xcode;

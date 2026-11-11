@@ -3233,6 +3233,66 @@
         ],
         "description": "What became of the application."
       },
+      "UnreadFolderView": {
+        "type": "object",
+        "description": "One folder not read in full.",
+        "required": [
+          "path",
+          "reason"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Where it is."
+          },
+          "reason": {
+            "$ref": "#/components/schemas/UnreadReasonView",
+            "description": "Why it was not read."
+          }
+        }
+      },
+      "UnreadFoldersView": {
+        "type": "object",
+        "description": "The folders a scan did not read in full.",
+        "required": [
+          "scan",
+          "total",
+          "folders"
+        ],
+        "properties": {
+          "folders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnreadFolderView"
+            },
+            "description": "The first of them, in path order."
+          },
+          "scan": {
+            "type": "string",
+            "description": "The scan's ID."
+          },
+          "total": {
+            "type": "string",
+            "description": "How many there are, as a decimal string; may exceed `folders`."
+          }
+        }
+      },
+      "UnreadReasonView": {
+        "type": "string",
+        "description": "Why a folder was not read in full.",
+        "enum": [
+          "privacy",
+          "system_protected",
+          "permissions",
+          "out_of_scope",
+          "denied",
+          "vanished",
+          "timed_out",
+          "failed",
+          "cut_short",
+          "not_entered"
+        ]
+      },
       "UpdateView": {
         "type": "object",
         "description": "The app's version and whether a newer one is published (ADR-0048).",

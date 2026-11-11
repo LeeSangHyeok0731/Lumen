@@ -149,6 +149,7 @@ pub fn app<R: Runtime>(
             commands::helper_disable,
             commands::helper_open_login_items,
             commands::app_icon,
+            commands::unread_folders,
             update::check_update,
             update::install_update,
         ])

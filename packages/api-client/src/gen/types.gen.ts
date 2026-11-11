@@ -1751,6 +1751,53 @@ export type UninstallResultView =
     };
 
 /**
+ * One folder not read in full.
+ */
+export type UnreadFolderView = {
+  /**
+   * Where it is.
+   */
+  path: string;
+  /**
+   * Why it was not read.
+   */
+  reason: UnreadReasonView;
+};
+
+/**
+ * The folders a scan did not read in full.
+ */
+export type UnreadFoldersView = {
+  /**
+   * The first of them, in path order.
+   */
+  folders: Array<UnreadFolderView>;
+  /**
+   * The scan's ID.
+   */
+  scan: string;
+  /**
+   * How many there are, as a decimal string; may exceed `folders`.
+   */
+  total: string;
+};
+
+/**
+ * Why a folder was not read in full.
+ */
+export type UnreadReasonView =
+  | "privacy"
+  | "system_protected"
+  | "permissions"
+  | "out_of_scope"
+  | "denied"
+  | "vanished"
+  | "timed_out"
+  | "failed"
+  | "cut_short"
+  | "not_entered";
+
+/**
  * The app's version and whether a newer one is published (ADR-0048).
  */
 export type UpdateView = {

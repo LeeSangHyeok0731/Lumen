@@ -1017,6 +1017,39 @@ export const zUninstallOutcomeView = z.object({
 });
 
 /**
+ * Why a folder was not read in full.
+ */
+export const zUnreadReasonView = z.enum([
+  "privacy",
+  "system_protected",
+  "permissions",
+  "out_of_scope",
+  "denied",
+  "vanished",
+  "timed_out",
+  "failed",
+  "cut_short",
+  "not_entered",
+]);
+
+/**
+ * One folder not read in full.
+ */
+export const zUnreadFolderView = z.object({
+  path: z.string(),
+  reason: zUnreadReasonView,
+});
+
+/**
+ * The folders a scan did not read in full.
+ */
+export const zUnreadFoldersView = z.object({
+  folders: z.array(zUnreadFolderView),
+  scan: z.string(),
+  total: z.string(),
+});
+
+/**
  * The app's version and whether a newer one is published (ADR-0048).
  */
 export const zUpdateView = z.object({
