@@ -959,6 +959,20 @@ export function memoryTransport({
       await wait(0);
       return null;
     },
+    // The sample scan could not read 12 folders in Containers; three are
+    // listed, so the page shows how it says there are more.
+    unreadFolders: async (scan) => {
+      await wait(pace);
+      const folder = (app: string) => ({
+        path: `${HOME}/Library/Containers/${app}/Data`,
+        reason: "privacy" as const,
+      });
+      return {
+        scan,
+        total: "12",
+        folders: ["com.apple.mail", "com.apple.Notes", "com.apple.Safari"].map(folder),
+      };
+    },
     uninstall: async (preview, confirmation) => {
       await wait(pace);
       const ready = previews.get(preview);

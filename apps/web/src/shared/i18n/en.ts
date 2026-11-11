@@ -6,6 +6,7 @@ import type {
   SoftwareOriginView,
   SoftwarePurposeView,
   UninstallReasonView,
+  UnreadReasonView,
 } from "@lumen/api-client";
 import { countFormat } from "./format";
 import type { RuleId } from "./rules";
@@ -419,6 +420,24 @@ export const en = {
   },
   details: {
     title: "Scan details",
+    unread: {
+      title: "Folders Lumen could not read",
+      loading: "Loading…",
+      failed: "Lumen could not list them.",
+      more: (n: string) => `and ${count(n)} more`,
+      reasons: {
+        privacy: "Blocked by macOS privacy protection. Allowing Full Disk Access can help.",
+        system_protected: "Protected by macOS. This is normal; there is nothing to change.",
+        permissions: "Your account may not read these. For system folders this is normal.",
+        out_of_scope: "Outside what Lumen may read on this device.",
+        denied: "Access was refused.",
+        vanished: "Removed while Lumen was scanning.",
+        timed_out: "Took too long to read. Scanning again may help.",
+        failed: "Could not be read.",
+        cut_short: "Read only in part.",
+        not_entered: "Not scanned: on another disk, excluded, or not reached.",
+      } satisfies { readonly [R in UnreadReasonView]: string },
+    },
     entries: (entries: string) => `${count(entries)} entries read`,
     files: "Files",
     fileCount: (files: string) => count(files),

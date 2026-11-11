@@ -26,6 +26,7 @@ import type {
   ToolStorageView,
   UninstallOutcomeView,
   UninstallPreviewView,
+  UnreadFoldersView,
   UpdateView,
 } from "@lumen/api-client";
 import type { Theme } from "@/shared/theme";
@@ -163,4 +164,11 @@ export interface LumenTransport {
    * where the host can draw it (the desktop app; macOS for now).
    */
   appIcon?(key: string): Promise<string | null>;
+  /**
+   * The folders a scan did not read in full, by path and why (ADR-0008):
+   * at most 1000, with the total. Reads only the index; takes the scan ID,
+   * never a path. Display only; never sent to AI review. Only where the
+   * host keeps the index (the desktop app).
+   */
+  unreadFolders?(scan: string): Promise<UnreadFoldersView>;
 }
