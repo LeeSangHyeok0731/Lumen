@@ -424,6 +424,25 @@ export const es: Messages = {
   },
   details: {
     title: "Detalles del análisis",
+    unread: {
+      title: "Carpetas que Lumen no pudo leer",
+      loading: "Cargando…",
+      failed: "Lumen no pudo mostrarlas.",
+      more: (n: string) => `y ${count(n)} más`,
+      reasons: {
+        privacy:
+          "Bloqueadas por la protección de privacidad de macOS. Permitir el acceso total al disco puede ayudar.",
+        system_protected: "Protegidas por macOS. Es normal; no hay nada que cambiar.",
+        permissions: "Tu cuenta no tiene permiso para leerlas. En carpetas del sistema es normal.",
+        out_of_scope: "Fuera de lo que Lumen puede leer en este dispositivo.",
+        denied: "Se denegó el acceso.",
+        vanished: "Se eliminaron mientras Lumen analizaba.",
+        timed_out: "Tardaron demasiado en leerse. Volver a analizar puede ayudar.",
+        failed: "No se pudieron leer.",
+        cut_short: "Se leyeron solo en parte.",
+        not_entered: "No analizadas: en otro disco, excluidas o no alcanzadas.",
+      },
+    },
     entries: (entries: string) => `${count(entries)} entradas leídas`,
     files: "Archivos",
     fileCount: (files: string) => count(files),

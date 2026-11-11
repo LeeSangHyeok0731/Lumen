@@ -415,6 +415,25 @@ export const ko = {
   },
   details: {
     title: "검사 세부 정보",
+    unread: {
+      title: "읽지 못한 폴더",
+      loading: "불러오는 중…",
+      failed: "목록을 불러오지 못했어요.",
+      more: (n: string) => `외 ${count(n)}개`,
+      reasons: {
+        privacy:
+          "macOS 개인정보 보호 때문에 읽지 못했어요. 전체 디스크 접근 권한을 허용하면 읽을 수 있어요.",
+        system_protected: "macOS가 보호하는 폴더예요. 정상이니 바꿀 것은 없어요.",
+        permissions: "이 계정에는 읽을 권한이 없어요. 시스템 폴더라면 정상이에요.",
+        out_of_scope: "이 기기에서 Lumen이 읽을 수 있는 범위 밖이에요.",
+        denied: "접근이 거부됐어요.",
+        vanished: "검사하는 동안 사라졌어요.",
+        timed_out: "읽는 데 너무 오래 걸렸어요. 다시 검사하면 읽을 수도 있어요.",
+        failed: "읽지 못했어요.",
+        cut_short: "일부만 읽었어요.",
+        not_entered: "검사하지 않았어요. 다른 디스크에 있거나, 제외됐거나, 검사가 닿지 않았어요.",
+      },
+    },
     entries: (entries: string) => `읽은 항목 ${count(entries)}개`,
     files: "파일",
     fileCount: (files: string) => `${count(files)}개`,

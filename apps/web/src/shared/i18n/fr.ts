@@ -408,6 +408,26 @@ export const fr: Messages = {
   },
   details: {
     title: "Détails de l'analyse",
+    unread: {
+      title: "Dossiers que Lumen n'a pas pu lire",
+      loading: "Chargement…",
+      failed: "Lumen n'a pas pu les afficher.",
+      more: (n) => `et ${count(n)} de plus`,
+      reasons: {
+        privacy:
+          "Bloqués par la protection de la vie privée de macOS. Autoriser l'accès complet au disque peut aider.",
+        system_protected: "Protégés par macOS. C'est normal ; il n'y a rien à changer.",
+        permissions:
+          "Votre compte n'a pas le droit de les lire. Pour les dossiers système, c'est normal.",
+        out_of_scope: "Hors de ce que Lumen peut lire sur cet appareil.",
+        denied: "L'accès a été refusé.",
+        vanished: "Supprimés pendant l'analyse.",
+        timed_out: "La lecture a pris trop de temps. Une nouvelle analyse peut aider.",
+        failed: "Impossible de les lire.",
+        cut_short: "Lus en partie seulement.",
+        not_entered: "Non analysés : sur un autre disque, exclus ou non atteints.",
+      },
+    },
     entries: (entries) => `${count(entries)} entrées lues`,
     files: "Fichiers",
     fileCount: (files) => count(files),
