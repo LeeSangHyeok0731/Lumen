@@ -129,8 +129,7 @@ fn a_missing_path_is_an_incomplete_scan_not_an_empty_one() -> Result<(), Box<dyn
 
 #[test]
 fn unread_lists_a_refused_folder_by_path_and_reason() -> Result<(), Box<dyn std::error::Error>> {
-    use std::os::unix::fs::PermissionsExt as _;
-
+    // The fixture restores the folder's permissions before it is removed.
     let fx = Fixture::build(&[
         Node::File {
             path: "root/open/one".into(),
@@ -140,9 +139,15 @@ fn unread_lists_a_refused_folder_by_path_and_reason() -> Result<(), Box<dyn std:
             path: "root/locked/secret".into(),
             contents: vec![2; 10],
         },
+        Node::Mode {
+            path: "root/locked".into(),
+            mode: 0o000,
+        },
     ])?;
-    let locked = fx.path("root/locked")?;
-    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000))?;
+    if std::fs::read_dir(fx.path("root/locked")?).is_ok() {
+        // Root reads it anyway: nothing is refused, so there is nothing to list.
+        return Ok(());
+    }
     let db = fx.path("index.db")?;
     let out = lumen(&[
         "scan".as_ref(),
@@ -151,10 +156,7 @@ fn unread_lists_a_refused_folder_by_path_and_reason() -> Result<(), Box<dyn std:
         db.as_os_str(),
         "--unread".as_ref(),
         "--json".as_ref(),
-    ]);
-    // Give access back first, so the fixture can be cleaned up whatever happened.
-    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))?;
-    let out = out?;
+    ])?;
     assert!(
         out.status.success(),
         "{}",
