@@ -565,15 +565,16 @@ mod tests {
             !root.join("Installed/Quarantine").exists(),
             "nothing created"
         );
-        let nowhere = Executor::new(root.join("missing-base"), vec![b"Quarantine".to_vec()]);
+        let missing = Executor::new(root.join("missing-base"), vec![b"Quarantine".to_vec()]);
         assert_eq!(
-            nowhere.quarantine(&item, op(8), b"{}"),
+            missing.quarantine(&item, op(8), b"{}"),
             Err(ExecutionFailure {
-                reason: QuarantineFailure::VolumeUnsupported,
+                reason: QuarantineFailure::StoreUnavailable,
                 left: ItemLocation::Source
             }),
-            "a base whose volume is unknown is not this volume's store"
+            "a base that does not open on the item's own drive is that drive's store, unavailable"
         );
+        assert!(!root.join("missing-base").exists(), "nothing created");
     }
 
     #[test]

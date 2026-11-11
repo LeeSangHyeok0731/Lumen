@@ -74,7 +74,9 @@ Chosen option: **1**.
   (`QuarantineFailure::StoreUnavailable`, "the quarantine folder on this drive could
   not be opened safely"), not as an unsupported drive, so the next such problem
   points at its cause. `VolumeUnsupported` now means only that no store location is
-  on the item's volume (or its base cannot be opened, so its volume is unknown).
+  on the item's volume. A base that cannot be opened (access denied, missing) counts
+  as on the item's volume when its drive's root is; only when that root cannot be
+  opened either (a drive that is not connected) is its volume unknown.
 - Bad: `StoreUnavailable` is a new failure reason written to the journal; a build
   older than this one reads it as a corrupt entry and fails closed (lists nothing,
   moves nothing) until it is updated.
