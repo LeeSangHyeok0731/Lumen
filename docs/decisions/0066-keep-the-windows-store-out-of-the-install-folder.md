@@ -70,11 +70,20 @@ Chosen option: **1**.
 - Good: items held in the old location keep their restore and finalize paths.
 - Bad: one more location is opened when a held item is looked up. It is a handful
   of handle opens per item.
-- Neutral: the failure message for a store that cannot be opened is still the
-  volume message; telling the reasons apart is a separate change.
+- Good: a store that fails its checks is reported as such
+  (`QuarantineFailure::StoreUnavailable`, "the quarantine folder on this drive could
+  not be opened safely"), not as an unsupported drive, so the next such problem
+  points at its cause. `VolumeUnsupported` now means only that no store location is
+  on the item's volume (or its base cannot be opened, so its volume is unknown).
+- Bad: `StoreUnavailable` is a new failure reason written to the journal; a build
+  older than this one reads it as a corrupt entry and fails closed (lists nothing,
+  moves nothing) until it is updated.
 
 ## Implementation
 
 1. `lumen-fs-exec`: `open_existing_store`, and `Executor::with_former_store`; lookups
    choose the store on the item's volume that has the item.
 2. `lumen-app`: the new store location and `Stores::former`.
+3. `lumen-domain`, `lumen-fs-exec`, `lumen-api`, web: the `StoreUnavailable` reason.
+   The Windows store checks the base's volume before anything else, so every later
+   error concerns a store on the item's volume.

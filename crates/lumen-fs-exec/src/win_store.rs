@@ -39,12 +39,27 @@ pub enum WinStoreError {
         /// The Win32 error code.
         code: i32,
     },
+    /// The base could not be opened or inspected, so its volume is unknown.
+    #[error("the store base could not be opened: OS error {code}")]
+    BaseUnreachable {
+        /// The Win32 error code.
+        code: i32,
+    },
     /// The store would be on another volume than the items.
     #[error("the store is on another volume")]
     OtherVolume,
     /// A directory is a reparse point, or its owner or DACL is not private.
     #[error("a store directory is not private to its owner")]
     Unsafe,
+}
+
+impl WinStoreError {
+    /// Whether the store is known to be on the items' volume: the error came
+    /// after the base was found on it. Otherwise this location is simply not
+    /// for that volume.
+    pub const fn on_volume(&self) -> bool {
+        !matches!(self, Self::OtherVolume | Self::BaseUnreachable { .. })
+    }
 }
 
 /// An open quarantine store.
@@ -134,15 +149,19 @@ fn open(
     let sddl = private_sddl(&user);
     let mut path = base.to_vec();
     path.push(0);
-    let mut dir = win_sys::open_root(&path).map_err(unreachable("the store base"))?;
-    let base_facts = win_sys::facts(&dir).map_err(unreachable("the store base"))?;
-    if base_facts.attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 || !base_facts.directory {
-        return Err(WinStoreError::Unsafe);
-    }
+    let base_unreachable = |error: io::Error| WinStoreError::BaseUnreachable {
+        code: error.raw_os_error().unwrap_or(0),
+    };
+    let mut dir = win_sys::open_root(&path).map_err(base_unreachable)?;
+    let base_facts = win_sys::facts(&dir).map_err(base_unreachable)?;
     // A store is only ever created on the volume of the items it is for
-    // (ADR-0046): nothing is created below a base on another volume.
+    // (ADR-0046): nothing is created below a base on another volume. Checked
+    // first, so every later error is about a store on the items' volume.
     if base_facts.volume != volume {
         return Err(WinStoreError::OtherVolume);
+    }
+    if base_facts.attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 || !base_facts.directory {
+        return Err(WinStoreError::Unsafe);
     }
     for name in names {
         dir = match win_sys::open_at(&dir, name, Want::Store) {
