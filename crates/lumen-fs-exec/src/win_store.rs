@@ -89,7 +89,7 @@ fn is_private(actual: &str, user: &str) -> bool {
     actual == expected || actual == expected.replacen("D:P(", "D:PAI(", 1)
 }
 
-fn missing(error: &io::Error) -> bool {
+pub(crate) fn missing(error: &io::Error) -> bool {
     matches!(
         error.raw_os_error().and_then(|c| u32::try_from(c).ok()),
         Some(ERROR_FILE_NOT_FOUND | ERROR_PATH_NOT_FOUND)
@@ -102,6 +102,31 @@ fn missing(error: &io::Error) -> bool {
 ///
 /// A [`WinStoreError`]; nothing that exists is changed.
 pub fn open_store(base: &[u16], names: &[&[u16]], volume: u64) -> Result<WinStore, WinStoreError> {
+    open(base, names, volume, true)
+}
+
+/// Opens `names` below `base` on `volume` with the same checks as
+/// [`open_store`], creating nothing: for a store that only holds items put
+/// there before.
+///
+/// # Errors
+///
+/// A [`WinStoreError`], [`WinStoreError::Unreachable`] if a directory is
+/// missing; nothing is changed.
+pub(crate) fn open_existing_store(
+    base: &[u16],
+    names: &[&[u16]],
+    volume: u64,
+) -> Result<WinStore, WinStoreError> {
+    open(base, names, volume, false)
+}
+
+fn open(
+    base: &[u16],
+    names: &[&[u16]],
+    volume: u64,
+    create: bool,
+) -> Result<WinStore, WinStoreError> {
     if names.is_empty() || !names.iter().all(|n| plain(n)) {
         return Err(WinStoreError::InvalidName);
     }
@@ -122,7 +147,7 @@ pub fn open_store(base: &[u16], names: &[&[u16]], volume: u64) -> Result<WinStor
     for name in names {
         dir = match win_sys::open_at(&dir, name, Want::Store) {
             Ok(existing) => existing,
-            Err(error) if missing(&error) => win_sys::create_dir_at(&dir, name, &sddl)
+            Err(error) if create && missing(&error) => win_sys::create_dir_at(&dir, name, &sddl)
                 .map_err(unreachable("a store directory"))?,
             Err(error) => return Err(unreachable("a store directory")(error)),
         };
@@ -241,6 +266,26 @@ mod tests {
         assert!(status.success(), "mklink /J failed");
         assert_eq!(
             open_store(&base, &[&wide("Linked")], volume).err(),
+            Some(WinStoreError::Unsafe)
+        );
+    }
+
+    #[test]
+    fn an_existing_store_opens_but_a_missing_one_is_not_created() {
+        let (_fx, root, base, volume) = setup();
+        let name = wide("Quarantine");
+        assert!(matches!(
+            open_existing_store(&base, &[&name], volume),
+            Err(WinStoreError::Unreachable { .. })
+        ));
+        assert!(!root.join("Quarantine").exists(), "nothing is created");
+        let made = open_store(&base, &[&name], volume).unwrap_or_else(|e| unreachable!("{e}"));
+        let found =
+            open_existing_store(&base, &[&name], volume).unwrap_or_else(|e| unreachable!("{e}"));
+        assert_eq!(made.identity, found.identity);
+        std::fs::create_dir(root.join("Planted")).unwrap_or_else(|e| unreachable!("{e}"));
+        assert_eq!(
+            open_existing_store(&base, &[&wide("Planted")], volume).err(),
             Some(WinStoreError::Unsafe)
         );
     }
